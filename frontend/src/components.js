@@ -1,40 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import {
+  ChevronDown, Send, Menu, Plus, Settings, Home, Rocket, Star, Zap, Book, HelpCircle, Users, Heart, Shield, Lightbulb, FileText, Sparkles, Globe
+} from 'lucide-react';
 
-// Icons and UI Components
-const ChevronDownIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-  </svg>
-);
-
-const SendIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-  </svg>
-);
-
-const MenuIcon = () => (
-  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-  </svg>
-);
-
-const PlusIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-  </svg>
-);
-
-const MessageIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-  </svg>
-);
-
-const SettingsIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+// Custom Chat Bubble Icon Component
+const ChatBubbleIcon = (props) => (
+  <svg {...props} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
   </svg>
 );
 
@@ -55,26 +27,26 @@ const TopBar = ({ onToggleSidebar, selectedModel, models, onModelChange }) => {
   }, []);
 
   return (
-    <div className="h-14 border-b border-gray-700 flex items-center justify-between px-4 bg-gray-800">
+    <div className="h-14 border-b border-dark-border flex items-center justify-between px-4 bg-dark-background">
       <div className="flex items-center space-x-4">
         <button
           onClick={onToggleSidebar}
-          className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+          className="p-2 hover:bg-dark-card rounded-lg transition-colors"
         >
-          <MenuIcon />
+          <Menu className="w-6 h-6 text-dark-text-light" />
         </button>
         
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-            className="flex items-center space-x-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-3 py-2 bg-dark-card hover:bg-dark-border rounded-lg transition-colors"
           >
-            <span className="text-sm font-medium">{selectedModel}</span>
-            <ChevronDownIcon />
+            <span className="text-sm font-medium text-dark-text-light">{selectedModel}</span>
+            <ChevronDown className="w-4 h-4 text-dark-text-light" />
           </button>
 
           {isModelDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-dark-background border border-dark-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
               {models.map((model) => (
                 <button
                   key={model}
@@ -82,8 +54,8 @@ const TopBar = ({ onToggleSidebar, selectedModel, models, onModelChange }) => {
                     onModelChange(model);
                     setIsModelDropdownOpen(false);
                   }}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors ${
-                    selectedModel === model ? 'bg-gray-700 text-orange-400' : 'text-gray-300'
+                  className={`w-full text-left px-4 py-2 text-sm font-medium hover:bg-dark-card transition-colors ${
+                    selectedModel === model ? 'bg-dark-border text-purple-gradient-start' : 'text-dark-text-light'
                   }`}
                 >
                   {model}
@@ -94,11 +66,6 @@ const TopBar = ({ onToggleSidebar, selectedModel, models, onModelChange }) => {
         </div>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
-          <SettingsIcon />
-        </button>
-      </div>
     </div>
   );
 };
@@ -106,48 +73,42 @@ const TopBar = ({ onToggleSidebar, selectedModel, models, onModelChange }) => {
 // Sidebar Component
 const Sidebar = ({ isOpen, onToggle, conversations, onNewChat }) => {
   const sidebarItems = [
-    { icon: '🏠', label: 'Home', active: true },
-    { icon: '🚀', label: 'Getting Started', active: false },
-    { icon: '⭐', label: 'Features', active: false },
-    { icon: '🔧', label: 'Troubleshooting', active: false },
-    { icon: '📚', label: 'Tutorials', active: false },
-    { icon: '🔌', label: 'OpenAPI Tool Servers', active: false },
-    { icon: '🔄', label: 'Pipelines', active: false },
-    { icon: '❓', label: 'FAQ', active: false },
-    { icon: '🗺️', label: 'Roadmap', active: false },
-    { icon: '🛡️', label: 'Security Policy', active: false },
-    { icon: '🤝', label: 'Contributing', active: false },
-    { icon: '💖', label: 'Sponsorships', active: false },
-    { icon: '📄', label: 'Open WebUI License', active: false },
-    { icon: '🏢', label: 'Open WebUI for Enterprises', active: false },
-    { icon: '🎯', label: 'Our Mission', active: false },
-    { icon: '👥', label: 'Our Team', active: false },
+    { icon: Home, label: 'Home', active: true },
+    { icon: Rocket, label: 'Getting Started', active: false },
+    { icon: Star, label: 'Features', active: false },
+    { icon: Zap, label: 'Troubleshooting', active: false },
+    { icon: Book, label: 'Tutorials', active: false },
+    { icon: Settings, label: 'Settings', active: false },
+    { icon: HelpCircle, label: 'FAQ', active: false },
+    { icon: Users, label: 'Community', active: false },
+    { icon: Heart, label: 'Sponsorships', active: false },
+    { icon: Shield, label: 'Security Policy', active: false },
   ];
 
   return (
-    <div className={`${isOpen ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden bg-gray-900 border-r border-gray-700 flex flex-col`}>
-      <div className="p-4 border-b border-gray-700">
+    <div className={`${isOpen ? 'w-80' : 'w-0'} transition-all duration-300 overflow-hidden bg-dark-background border-r border-dark-border flex flex-col`}>
+      <div className="p-4 border-b border-dark-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
-              <span className="text-sm font-bold text-white">OI</span>
+            <div className="w-8 h-8 bg-purple-gradient rounded-xl flex items-center justify-center">
+              <ChatBubbleIcon className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold">Open WebUI</span>
+            <span className="text-lg font-bold bg-purple-gradient bg-clip-text text-transparent">Shianco Chat</span>
           </div>
         </div>
         
         <button
           onClick={onNewChat}
-          className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
+          className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity"
         >
-          <PlusIcon />
-          <span>New Chat</span>
+          <Plus className="w-5 h-5 text-white" />
+          <span className="font-medium">New Chat</span>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+          <h3 className="text-xs font-semibold text-dark-text-dark uppercase tracking-wider mb-3">
             Navigation
           </h3>
           <nav className="space-y-1">
@@ -155,39 +116,52 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat }) => {
               <button
                 key={index}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-left ${
-                  item.active 
-                    ? 'bg-orange-600 text-white' 
-                    : 'text-gray-300 hover:bg-gray-800'
+                  item.active
+                    ? 'bg-purple-gradient text-white'
+                    : 'text-dark-text-light hover:bg-dark-card'
                 }`}
               >
-                <span className="text-sm">{item.icon}</span>
-                <span className="text-sm">{item.label}</span>
+                <item.icon className="w-5 h-5" />
+                <span className="text-sm font-medium">{item.label}</span>
               </button>
             ))}
           </nav>
         </div>
 
-        <div className="p-4 border-t border-gray-700">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+        <div className="p-4 border-t border-dark-border">
+          <h3 className="text-xs font-semibold text-dark-text-dark uppercase tracking-wider mb-3">
             Recent Conversations
           </h3>
           <div className="space-y-2">
             {conversations.map((conversation) => (
               <button
                 key={conversation.id}
-                className="w-full flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                className="w-full flex items-start space-x-3 p-3 rounded-lg hover:bg-dark-card transition-colors text-left"
               >
-                <MessageIcon />
+                <ChatBubbleIcon className="w-5 h-5 text-dark-text-light" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-200 truncate">
+                  <p className="text-sm font-medium text-dark-text-light truncate">
                     {conversation.title}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-dark-text-dark">
                     {conversation.timestamp}
                   </p>
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* User Profile Section */}
+      <div className="p-4 border-t border-dark-border">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
+            <ChatBubbleIcon className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-dark-text-light">Shianco User</p>
+            <p className="text-xs text-dark-text-dark">Free Plan</p>
           </div>
         </div>
       </div>
@@ -214,8 +188,8 @@ const MessageBubble = ({ message, isTyping = false }) => {
         
         <div className={`px-4 py-3 rounded-2xl ${
           isUser 
-            ? 'bg-orange-600 text-white' 
-            : 'bg-gray-700 text-gray-100'
+            ? 'bg-orange-600 text-white font-medium'
+            : 'bg-gray-700 text-gray-100 font-medium'
         }`}>
           <p className="text-sm leading-relaxed">
             {isTyping ? (
@@ -239,27 +213,38 @@ const MessageBubble = ({ message, isTyping = false }) => {
 
 // Suggested Prompts Component
 const SuggestedPrompts = ({ prompts, onPromptClick }) => {
+  const LucideIconMap = {
+    Lightbulb, FileText, Sparkles, Globe
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl w-full">
-      {prompts.map((prompt, index) => (
-        <button
-          key={index}
-          onClick={() => onPromptClick(prompt)}
-          className="p-4 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left border border-gray-700"
-        >
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">{prompt.icon}</span>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-200 mb-1">
-                {prompt.title}
-              </h3>
-              <p className="text-xs text-gray-400">
-                {prompt.description}
-              </p>
+      {prompts.map((prompt, index) => {
+        const IconComponent = LucideIconMap[prompt.icon];
+        return (
+          <button
+            key={index}
+            onClick={() => onPromptClick(prompt)}
+            className="p-4 bg-dark-card hover:bg-dark-border rounded-xl transition-colors text-left border border-dark-border"
+          >
+            <div className="flex items-center space-x-3">
+              {IconComponent && (
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-dark-input-bg">
+                  <IconComponent className="w-6 h-6 text-white" />
+                </div>
+              )}
+              <div>
+                <h3 className="text-sm font-semibold text-dark-text-light mb-1">
+                  {prompt.title}
+                </h3>
+                <p className="text-xs text-dark-text-dark">
+                  {prompt.description}
+                </p>
+              </div>
             </div>
-          </div>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 };
@@ -281,33 +266,32 @@ const ChatInput = ({ value, onChange, onSend, disabled }) => {
   };
 
   return (
-    <div className="border-t border-gray-700 p-4 bg-gray-800">
+    <div className="border-t border-dark-border p-4 bg-dark-background">
       <div className="max-w-4xl mx-auto">
-        <form onSubmit={handleSubmit} className="flex items-end space-x-4">
-          <div className="flex-1 relative">
+        <form onSubmit={handleSubmit} className="relative">
+          <div className="flex items-end">
             <textarea
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Send a message..."
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-white placeholder-gray-400"
+              className="w-full pl-4 pr-12 py-3 bg-dark-input-bg border border-dark-border rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-purple-gradient-start focus:border-transparent text-dark-text-light font-medium placeholder-dark-text-dark"
               rows="1"
               disabled={disabled}
               style={{ minHeight: '44px', maxHeight: '120px' }}
             />
+            <button
+              type="submit"
+              disabled={!value.trim() || disabled}
+              className="absolute right-2 bottom-2 p-2 bg-purple-gradient hover:opacity-90 disabled:bg-dark-border disabled:cursor-not-allowed rounded-xl transition-opacity"
+            >
+              <Send className="w-5 h-5 text-white" />
+            </button>
           </div>
-          
-          <button
-            type="submit"
-            disabled={!value.trim() || disabled}
-            className="p-3 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl transition-colors"
-          >
-            <SendIcon />
-          </button>
         </form>
         
-        <p className="text-xs text-gray-400 mt-2 text-center">
-          Open WebUI may generate inaccurate information about people, places, or facts.
+        <p className="text-xs text-dark-text-dark mt-2 text-center">
+          Shianco Chat may generate inaccurate information about people, places, or facts.
         </p>
       </div>
     </div>
@@ -321,7 +305,7 @@ const ModelSelector = ({ models, selectedModel, onModelChange }) => {
       <select
         value={selectedModel}
         onChange={(e) => onModelChange(e.target.value)}
-        className="appearance-none bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-white"
+        className="appearance-none bg-dark-card border border-dark-border rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-purple-gradient-start focus:border-transparent text-dark-text-light"
       >
         {models.map((model) => (
           <option key={model} value={model}>
@@ -330,7 +314,7 @@ const ModelSelector = ({ models, selectedModel, onModelChange }) => {
         ))}
       </select>
       <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-        <ChevronDownIcon />
+        <ChevronDown className="w-4 h-4 text-dark-text-light" />
       </div>
     </div>
   );

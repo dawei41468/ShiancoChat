@@ -15,8 +15,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #111827;
-  color: #ffffff;
+  background-color: #1A1A2E;
+  color: #E0E0E0;
 }
 
 .App {
@@ -30,16 +30,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #0A0A10;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: #15151F;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #25252F;
 }
 
 /* Animation delays for typing indicator */
@@ -75,7 +75,7 @@ body {
 
 /* Chat input focus effects */
 .chat-input:focus {
-  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.5);
+  box-shadow: 0 0 0 2px rgba(140, 80, 240, 0.5);
 }
 
 /* Sidebar transition */
