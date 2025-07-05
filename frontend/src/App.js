@@ -46,22 +46,22 @@ function App() {
     {
       title: 'Help me debug',
       description: 'Help me debug this piece of code',
-      icon: '🐛'
+      icon: 'Lightbulb', // Changed to Lucide icon name
     },
     {
       title: 'Chat with Docs',
       description: 'Upload a document and chat with it',
-      icon: '📄'
+      icon: 'FileText', // Changed to Lucide icon name
     },
     {
       title: 'Generate artwork',
       description: 'Create beautiful AI-generated artwork',
-      icon: '🎨'
+      icon: 'Sparkles', // Changed to Lucide icon name
     },
     {
       title: 'Tell me a fun fact',
       description: 'Share an interesting fact about science',
-      icon: '🔬'
+      icon: 'Globe', // Changed to Lucide icon name
     }
   ];
 
@@ -120,7 +120,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className="flex h-screen bg-dark-background text-dark-text-light font-medium">
       {/* Sidebar */}
       <Sidebar 
         isOpen={sidebarOpen}
@@ -144,12 +144,15 @@ function App() {
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8">
               <div className="text-center mb-12">
-                <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center mb-4 mx-auto">
-                  <span className="text-2xl font-bold text-white">OI</span>
+                <div className="w-20 h-20 bg-purple-gradient rounded-full flex items-center justify-center mb-4 mx-auto">
+                  {/* Replaced 'OI' text with SVG icon */}
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+                  </svg>
                 </div>
-                <h1 className="text-3xl font-bold mb-2">Open WebUI</h1>
-                <p className="text-gray-400 text-lg">
-                  How can I help you today?
+                <h1 className="text-3xl font-bold mb-2 bg-purple-gradient bg-clip-text text-transparent">Shianco Chat</h1>
+                <p className="text-dark-text-dark text-lg">
+                  How can I help you today? Choose a starter below or ask me anything.
                 </p>
               </div>
               
