@@ -58,6 +58,9 @@ class Conversation(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_updated: datetime = Field(default_factory=datetime.utcnow)
 
+class UpdateConversationTitleRequest(BaseModel):
+    new_title: str
+
 # Initial root endpoint
 class MessageCreate(BaseModel):
     conversation_id: str
@@ -83,6 +86,11 @@ async def create_chat_message(input: MessageCreate) -> StreamingResponse:
     # Add the current user message to the history for LLM context, ensuring 'user' role
     conversation_history.append({"role": "user", "content": input.text})
 
+    # Check if this is the first message in the conversation
+    is_first_message = await db.messages.count_documents(
+        {"conversation_id": input.conversation_id}
+    ) == 0
+
     # Save user message immediately
     user_message_obj = Message(
         conversation_id=input.conversation_id,
@@ -90,6 +98,21 @@ async def create_chat_message(input: MessageCreate) -> StreamingResponse:
         text=input.text
     )
     await db.messages.insert_one(user_message_obj.dict())
+
+    # If it's the first message, update the conversation title
+    if is_first_message:
+        # Truncate the title to avoid excessively long names
+        new_title = input.text[:20] + "..." if len(input.text) > 20 else input.text
+        await db.conversations.update_one(
+            {"id": input.conversation_id},
+            {"$set": {"title": new_title, "last_updated": datetime.utcnow()}}
+        )
+    else:
+        # Only update last_updated for subsequent messages
+        await db.conversations.update_one(
+            {"id": input.conversation_id},
+            {"$set": {"last_updated": datetime.utcnow()}}
+        )
 
     async def generate_and_stream_response():
         full_ai_response_content = ""
@@ -133,6 +156,22 @@ async def create_new_conversation(input: ConversationCreate):
     new_conversation = Conversation(title=input.title)
     await db.conversations.insert_one(new_conversation.dict())
     return new_conversation
+
+@api_router.put("/chat/conversations/{conversation_id}")
+async def update_conversation_title(conversation_id: str, request: UpdateConversationTitleRequest):
+    await db.conversations.update_one(
+        {"id": conversation_id},
+        {"$set": {"title": request.new_title, "last_updated": datetime.utcnow()}}
+    )
+    return {"message": "Conversation title updated successfully"}
+
+@api_router.delete("/chat/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    # Delete all messages associated with the conversation
+    await db.messages.delete_many({"conversation_id": conversation_id})
+    # Delete the conversation itself
+    await db.conversations.delete_one({"id": conversation_id})
+    return {"message": "Conversation deleted successfully"}
 
 # LLM Service endpoint
 @api_router.get("/llm/models")

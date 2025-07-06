@@ -13,7 +13,8 @@ const {
   SuggestedPrompts,
   ChatInput,
   TopBar,
-  AIResponseBlock // Import the new component
+  AIResponseBlock, // Import the new component
+  ConversationActions // Import the new component
 } = Components;
 
 function App() {
@@ -24,7 +25,29 @@ function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [creatingNewChat, setCreatingNewChat] = useState(false); // New state to prevent duplicate new chat creation
+  const [isChatInputFullScreen, setIsChatInputFullScreen] = useState(false); // New state for chat input full screen mode
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('isDarkMode');
+    return savedTheme ? JSON.parse(savedTheme) : true;
+  });
   const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light-theme');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light-theme');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    console.log('Toggle theme clicked, switching mode');
+    setIsDarkMode(prevMode => !prevMode);
+  };
 
   // Suggested prompts (can remain static or be fetched)
   const suggestedPrompts = [
@@ -64,16 +87,19 @@ function App() {
     try {
       const response = await axios.get(`${BACKEND_URL}/api/chat/conversations`);
       setConversations(response.data);
-      if (response.data.length > 0 && !currentConversationId) {
-        setCurrentConversationId(response.data[0].id); // Select the most recent conversation
-      } else if (response.data.length === 0) {
-        // If no conversations exist, create a new one automatically
-        handleNewChat();
+      if (response.data.length > 0) {
+        // If there are conversations, and no current one is selected, select the most recent
+        if (!currentConversationId) {
+          setCurrentConversationId(response.data[0].id);
+        }
+      } else {
+        // If no conversations exist, ensure currentConversationId is null so a new one can be created
+        setCurrentConversationId(null);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
     }
-  }, [currentConversationId]);
+  }, [currentConversationId]); // Removed creatingNewChat from dependencies to avoid re-runs
 
   // Fetch messages for the current conversation
   const fetchMessages = useCallback(async (conversationId) => {
@@ -83,10 +109,24 @@ function App() {
     }
     try {
       const response = await axios.get(`${BACKEND_URL}/api/chat/conversations/${conversationId}/messages`);
-      setMessages(response.data.map(msg => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      })));
+      setMessages(response.data.map(msg => {
+        let thinkingContent = '';
+        let answerContent = msg.text;
+
+        if (msg.sender === 'assistant') {
+          const thinkingMatch = msg.text.match(/<think>(.*?)<\/think>/s);
+          if (thinkingMatch && thinkingMatch[1]) {
+            thinkingContent = thinkingMatch[1].trim();
+            answerContent = msg.text.replace(/<think>.*?<\/think>/s, '').trim();
+          }
+        }
+
+        return {
+          ...msg,
+          timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ...(msg.sender === 'assistant' ? { thinking: thinkingContent, answer: answerContent, isThinkingComplete: true } : {})
+        };
+      }));
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
@@ -94,8 +134,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+    // Only fetch conversations if not currently creating a new chat to prevent race conditions
+    if (!creatingNewChat) {
+      fetchConversations();
+    }
+  }, [fetchConversations, creatingNewChat]); // Add creatingNewChat to dependency array
 
   useEffect(() => {
     fetchMessages(currentConversationId);
@@ -287,9 +330,12 @@ function App() {
       const response = await axios.post(`${BACKEND_URL}/api/chat/new`, { title: "New Chat" });
       setCurrentConversationId(response.data.id);
       setMessages([]);
-      fetchConversations(); // Refresh conversations list
+      // No need to call fetchConversations here, as setting currentConversationId will trigger fetchMessages
+      // and fetchConversations is already called in a useEffect.
     } catch (error) {
       console.error('Error creating new chat:', error);
+    } finally {
+      setCreatingNewChat(false); // Reset the flag after creation attempt
     }
   };
 
@@ -298,8 +344,47 @@ function App() {
     setMessages([]); // Clear messages while new ones are fetched
   };
 
+  const handleRenameConversation = async (conversationId) => {
+    const newTitle = prompt("Enter new title for the conversation:");
+    if (newTitle && newTitle.trim() !== "") {
+      try {
+        await axios.put(`${BACKEND_URL}/api/chat/conversations/${conversationId}`, { new_title: newTitle });
+        fetchConversations(); // Refresh conversations list
+      } catch (error) {
+        console.error('Error renaming conversation:', error);
+        alert('Failed to rename conversation.');
+      }
+    }
+  };
+
+  const handleDeleteConversation = async (conversationId) => {
+    if (window.confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
+      try {
+        await axios.delete(`${BACKEND_URL}/api/chat/conversations/${conversationId}`);
+        // After deletion, refresh conversations.
+        // The logic in fetchConversations will handle selecting a new one or creating if none exist.
+        await fetchConversations();
+
+        if (currentConversationId === conversationId) {
+          // If the deleted conversation was the active one, clear messages.
+          // currentConversationId will be set to null by fetchConversations if no other conversations exist.
+          setMessages([]);
+        }
+        // If after deletion and refresh, there are still no conversations, create a new one.
+        // This handles the case where the last conversation was deleted.
+        const updatedConversationsResponse = await axios.get(`${BACKEND_URL}/api/chat/conversations`);
+        if (updatedConversationsResponse.data.length === 0) {
+          handleNewChat();
+        }
+      } catch (error) {
+        console.error('Error deleting conversation:', error);
+        alert('Failed to delete conversation.');
+      }
+    }
+  };
+
   return (
-    <div className="flex h-screen bg-dark-background text-dark-text-light font-medium">
+    <div className={`flex h-screen font-medium ${isDarkMode ? 'bg-dark-background text-dark-text-light' : 'bg-light-background text-light-text-dark'}`}>
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -308,6 +393,9 @@ function App() {
         onNewChat={handleNewChat}
         onSelectConversation={handleSelectConversation}
         currentConversationId={currentConversationId}
+        onRenameConversation={handleRenameConversation}
+        onDeleteConversation={handleDeleteConversation}
+        isDarkMode={isDarkMode}
       />
 
       {/* Main Chat Area */}
@@ -316,10 +404,12 @@ function App() {
         <TopBar
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           selectedModel={selectedModel}
+          isDarkMode={isDarkMode}
+          toggleTheme={toggleTheme}
         />
 
         {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="flex-1 flex flex-col items-center justify-center p-8" style={{ transform: 'translateY(-12%)' }}>
             <div className="text-center mb-12">
               <div className="w-20 h-20 bg-purple-gradient rounded-full flex items-center justify-center mb-4 mx-auto">
                 {/* Replaced 'OI' text with SVG icon */}
@@ -328,7 +418,7 @@ function App() {
                 </svg>
               </div>
               <h1 className="text-3xl font-bold mb-2 bg-purple-gradient bg-clip-text text-transparent">Shianco Chat</h1>
-              <p className="text-dark-text-dark text-lg">
+              <p className={`text-lg ${isDarkMode ? 'text-dark-text-dark' : 'text-black'}`}>
                 How can I help you today? Choose a starter below or ask me anything.
               </p>
             </div>
@@ -336,16 +426,17 @@ function App() {
             <SuggestedPrompts
               prompts={suggestedPrompts}
               onPromptClick={handlePromptClick}
+              isDarkMode={isDarkMode}
             />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto pb-[236px]"> {/* Adjusted padding-bottom for new ChatInput fixed height */}
             <div className="max-w-4xl mx-auto p-4 space-y-4">
               {messages.map((message) => (
                 message.sender === 'user' ? (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble key={message.id} message={message} isDarkMode={isDarkMode} />
                 ) : (
-                  <AIResponseBlock key={message.id} response={message} />
+                  <AIResponseBlock key={message.id} response={message} isDarkMode={isDarkMode} />
                 )
               ))}
               <div ref={chatEndRef} />
@@ -359,6 +450,9 @@ function App() {
           onChange={setInputValue}
           onSend={handleSendMessage}
           disabled={isTyping}
+          onFullScreenToggle={setIsChatInputFullScreen} // Pass the setter for full screen state
+          sidebarOpen={sidebarOpen} // Pass sidebarOpen state
+          isDarkMode={isDarkMode}
         />
       </div>
     </div>

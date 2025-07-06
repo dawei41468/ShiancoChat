@@ -115,3 +115,80 @@ body {
     transform: translateX(0);
   }
 }
+  
+/* Light Mode Theme Styles */
+.light-theme body {
+  background-color: #FFFFFF;
+  color: #000000;
+}
+
+.light-theme .App {
+  background-color: #FFFFFF;
+  color: #000000;
+}
+
+.light-theme .sidebar {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+.light-theme .sidebar .icon-shianco-user {
+  color: #FFFFFF !important;
+}
+
+
+.light-theme .bg-dark-topbar svg path {
+  stroke: #FFFFFF !important;
+}
+
+.light-theme .sidebar .border-dark-border {
+  border-color: #E0E0E0 !important;
+}
+
+.light-theme .sidebar .bg-dark-card {
+  background-color: #F5F5F5 !important;
+}
+
+.light-theme .sidebar .bg-dark-card-selected {
+  background-color: #E8E8E8 !important;
+}
+
+
+.light-theme ::-webkit-scrollbar-track {
+  background: #F0F0F0;
+}
+
+.light-theme ::-webkit-scrollbar-thumb {
+  background: #D0D0D0;
+html.light-theme,
+html.light-theme body,
+html.light-theme span,
+html.light-theme div,
+html.light-theme p,
+html.light-theme a,
+html.light-theme li,
+html.light-theme h1,
+html.light-theme h2,
+html.light-theme h3,
+html.light-theme h4,
+html.light-theme h5,
+html.light-theme h6,
+html.light-theme .text-dark-text-light,
+html.light-theme .text-dark-text-dark,
+html.light-theme .text-white,
+html.light-theme .text-gray-100,
+html.light-theme .text-gray-200,
+html.light-theme .text-gray-300,
+html.light-theme .sidebar,
+html.light-theme .sidebar span,
+html.light-theme .sidebar div,
+html.light-theme [class*="text-dark-"],
+html.light-theme [class*="text-gray-"] {
+  color: #333333 !important;
+}
+  border-radius: 3px;
+}
+
+.light-theme ::-webkit-scrollbar-thumb:hover {
+  background: #B0B0B0;
+}
