@@ -30,7 +30,7 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
       <div className="flex items-center space-x-4">
         <button
           onClick={onToggleSidebar}
-          className="p-2 border border-dark-border rounded-full bg-purple-gradient hover:bg-dark-card transition-colors pointer-events-auto z-50"
+          className="p-2 rounded-full bg-purple-gradient hover:bg-dark-card transition-colors pointer-events-auto z-50"
           aria-label={t.toggleSidebar || "Toggle Sidebar"}
         >
           <ChatBubbleIcon className="w-6 h-6" />
@@ -58,12 +58,9 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
   const { language, toggleLanguage, t } = useLanguage();
   const sidebarItems = [
     { icon: Home, label: 'Home', active: true },
-    { icon: Rocket, label: t.gettingStarted, active: false },
     { icon: Book, label: 'Tutorials', active: false },
     { icon: Settings, label: 'Settings', active: false },
     { icon: HelpCircle, label: 'FAQ', active: false },
-    { icon: Users, label: 'Community', active: false },
-    { icon: Shield, label: t.securityPolicy, active: false },
   ];
 
   return (
@@ -97,7 +94,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-left ${
                   item.active
                     ? 'bg-purple-gradient text-white'
-                    : `hover:bg-dark-card ${isDarkMode ? 'text-dark-text-light' : 'text-black'}`
+                    : `${isDarkMode ? 'hover:bg-dark-card text-dark-text-light' : 'hover:bg-gray-100 text-black'}`
                 }`}
               >
                 <item.icon className="w-5 h-5" />
