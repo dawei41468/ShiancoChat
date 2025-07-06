@@ -26,7 +26,7 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
   const { t } = useLanguage();
 
   return (
-    <div className={`h-14 border-b flex items-center justify-between px-4 ${isDarkMode ? 'border-dark-border bg-dark-background' : 'border-gray-200 bg-white'}`}>
+    <div className={`h-14 border-b flex items-center justify-between px-4 ${isDarkMode ? 'border-dark-border dark-theme-bg' : 'border-gray-200 bg-white'}`}>
       <div className="flex items-center space-x-4">
         <button
           onClick={onToggleSidebar}
@@ -67,7 +67,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
   ];
 
   return (
-    <div className={`sidebar ${isOpen ? 'w-72' : 'w-0'} transition-all duration-300 overflow-hidden ${isDarkMode ? 'bg-dark-background border-r border-dark-border' : 'bg-white border-r border-gray-200'} flex flex-col`}>
+    <div className={`sidebar ${isOpen ? 'w-72' : 'w-0'} transition-all duration-300 overflow-hidden ${isDarkMode ? 'dark-theme-bg border-r border-dark-border' : 'bg-white border-r border-gray-200'} flex flex-col`}>
       <div className="p-4 border-b border-dark-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
@@ -356,11 +356,11 @@ const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, side
 
   return (
     <div className={`
-      fixed bottom-0 z-10
-      border-t p-4
-      transition-all duration-300 ease-in-out flex flex-col
-      ${isDarkMode ? 'border-dark-border bg-dark-background' : 'border-gray-200 bg-white'}
-    `} style={{
+     fixed bottom-0 z-10
+     border-t p-4
+     transition-all duration-300 ease-in-out flex flex-col
+     ${isDarkMode ? 'border-dark-border dark-theme-bg' : 'border-gray-200 bg-white'}
+   `} style={{
       left: sidebarOpen ? '288px' : '0px', // Adjust left based on sidebar state (updated for w-72)
       right: '0px' // Ensure it always extends to the right edge
     }}>

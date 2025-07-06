@@ -15,7 +15,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1A1A2E;
+  background-color: #0A0A10;
   color: #E0E0E0;
 }
 
@@ -191,4 +191,13 @@ html.light-theme [class*="text-gray-"] {
 
 .light-theme ::-webkit-scrollbar-thumb:hover {
   background: #B0B0B0;
+}
+
+/* Darker background classes for dark mode */
+.dark-theme-bg {
+  background-color: #0A0A10 !important;
+}
+
+.dark-theme-chat-window {
+  background-color: #0A0A10 !important;
 }
