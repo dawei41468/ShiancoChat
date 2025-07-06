@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import './App.css';
 import { Components } from './components';
 import axios from 'axios';
+import { LanguageProvider, useLanguage } from './LanguageContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100';
 
@@ -32,6 +33,7 @@ function App() {
     return savedTheme ? JSON.parse(savedTheme) : true;
   });
   const chatEndRef = useRef(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
@@ -52,23 +54,23 @@ function App() {
   // Suggested prompts (can remain static or be fetched)
   const suggestedPrompts = [
     {
-      title: 'Help me debug',
-      description: 'Help me debug this piece of code',
+      titleKey: 'prompt1Title',
+      descriptionKey: 'prompt1Description',
       icon: 'Lightbulb',
     },
     {
-      title: 'Chat with Docs',
-      description: 'Upload a document and chat with it',
+      titleKey: 'prompt2Title',
+      descriptionKey: 'prompt2Description',
       icon: 'FileText',
     },
     {
-      title: 'Generate artwork',
-      description: 'Create beautiful AI-generated artwork',
+      titleKey: 'prompt3Title',
+      descriptionKey: 'prompt3Description',
       icon: 'Sparkles',
     },
     {
-      title: 'Tell me a fun fact',
-      description: 'Share an interesting fact about science',
+      titleKey: 'prompt4Title',
+      descriptionKey: 'prompt4Description',
       icon: 'Globe',
     }
   ];
@@ -383,6 +385,7 @@ function App() {
     }
   };
 
+  // Removed direct useContext call outside of LanguageProvider scope
   return (
     <div className={`flex h-screen font-medium ${isDarkMode ? 'bg-dark-background text-dark-text-light' : 'bg-light-background text-light-text-dark'}`}>
       {/* Sidebar */}
@@ -417,9 +420,9 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
                 </svg>
               </div>
-              <h1 className="text-3xl font-bold mb-2 bg-purple-gradient bg-clip-text text-transparent">Shianco Chat</h1>
+              <h1 className="text-3xl font-bold mb-2 bg-purple-gradient bg-clip-text text-transparent">ShiancoChat</h1>
               <p className={`text-lg ${isDarkMode ? 'text-dark-text-dark' : 'text-black'}`}>
-                How can I help you today? Choose a starter below or ask me anything.
+                {t.welcomeMessage}
               </p>
             </div>
             

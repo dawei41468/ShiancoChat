@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronDown, Send, Plus, Settings, Home, Rocket, Star, Zap, Book, HelpCircle, Users, Heart, Shield, Lightbulb, FileText, Sparkles, Globe, Menu, MoreVertical, Pencil, Trash, Maximize2, Minimize2, Sun, Moon
 } from 'lucide-react';
+import { useLanguage } from './LanguageContext';
 
 // Custom Chat Bubble Icon Component
 const ChatBubbleIcon = ({ useGradient, ...props }) => {
@@ -22,6 +23,7 @@ const ChatBubbleIcon = ({ useGradient, ...props }) => {
 
 // Top Bar Component
 const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => {
+  const { t } = useLanguage();
 
   return (
     <div className={`h-14 border-b flex items-center justify-between px-4 ${isDarkMode ? 'border-dark-border bg-dark-background' : 'border-gray-200 bg-white'}`}>
@@ -29,7 +31,7 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
         <button
           onClick={onToggleSidebar}
           className="p-2 border border-dark-border rounded-full bg-purple-gradient hover:bg-dark-card transition-colors pointer-events-auto z-50"
-          aria-label="Toggle Sidebar"
+          aria-label={t.toggleSidebar || "Toggle Sidebar"}
         >
           <ChatBubbleIcon className="w-6 h-6" />
         </button>
@@ -42,7 +44,7 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
         <button
           onClick={toggleTheme}
           className={`p-1 border rounded-full hover:bg-dark-hover transition-colors cursor-pointer z-50 ${isDarkMode ? 'bg-dark-card border-dark-border' : 'bg-gray-100 border-gray-300'}`}
-          aria-label="Toggle Light/Dark Mode"
+          aria-label={t.toggleTheme || "Toggle Light/Dark Mode"}
         >
           {!isDarkMode ? <Moon className={`w-4 h-4 ${isDarkMode ? 'text-dark-text-light' : 'text-gray-700'}`} /> : <Sun className="w-4 h-4 text-dark-text-light" />}
         </button>
@@ -53,15 +55,15 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
 
 // Sidebar Component
 const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversation, currentConversationId, onRenameConversation, onDeleteConversation, isDarkMode }) => {
-  const [language, setLanguage] = useState('EN');
+  const { language, toggleLanguage, t } = useLanguage();
   const sidebarItems = [
     { icon: Home, label: 'Home', active: true },
-    { icon: Rocket, label: 'Getting Started', active: false },
+    { icon: Rocket, label: t.gettingStarted, active: false },
     { icon: Book, label: 'Tutorials', active: false },
     { icon: Settings, label: 'Settings', active: false },
     { icon: HelpCircle, label: 'FAQ', active: false },
     { icon: Users, label: 'Community', active: false },
-    { icon: Shield, label: 'Security Policy', active: false },
+    { icon: Shield, label: t.securityPolicy, active: false },
   ];
 
   return (
@@ -70,7 +72,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <ChatBubbleIcon className="w-6 h-6" useGradient={true} />
-            <span className="text-lg font-bold bg-purple-gradient bg-clip-text text-transparent">Shianco Chat</span>
+            <span className="text-lg font-bold bg-purple-gradient bg-clip-text text-transparent">ShiancoChat</span>
           </div>
         </div>
         
@@ -79,14 +81,14 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
           className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity"
         >
           <Plus className="w-5 h-5 text-white" />
-          <span className="font-medium" style={{ color: '#FFFFFF' }}>New Chat</span>
+          <span className="font-medium" style={{ color: '#FFFFFF' }}>{t.newChat || "New Chat"}</span>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
-            Navigation
+            {t.navigation || "Navigation"}
           </h3>
           <nav className="space-y-1">
             {sidebarItems.map((item, index) => (
@@ -99,7 +101,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
                 }`}
               >
                 <item.icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{item.label}</span>
+                <span className="text-sm font-medium">{t[item.label.toLowerCase().replace(' ', '')] || item.label}</span>
               </button>
             ))}
           </nav>
@@ -107,7 +109,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
 
         <div className="p-4 border-t border-dark-border">
           <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
-            Recent Conversations
+            {t.recentConversations || "Recent Conversations"}
           </h3>
           <div className="space-y-2">
             {conversations.map((conversation) => (
@@ -152,8 +154,8 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
             <ChatBubbleIcon className="w-6 h-6" stroke="currentColor" />
           </div>
           <div className="flex-1 flex items-center space-x-4">
-            <p className="text-sm font-semibold" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>Shianco User</p>
-            <button className="text-xs font-medium px-1 py-0.5 border-none rounded-md transition-colors overflow-hidden" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }} onClick={() => setLanguage(language === 'EN' ? 'CN' : 'EN')}>
+            <p className="text-sm font-semibold mr-4" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>{t.userName}</p>
+            <button className="text-xs font-medium px-1 py-0.5 border-none rounded-md transition-colors overflow-hidden ml-4" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }} onClick={toggleLanguage}>
               <div className="flex items-center">
                 <span className={`px-0.5 py-0.5 ${language === 'EN' ? 'bg-purple-gradient text-white font-extrabold rounded-md' : ''}`}>
                   EN
@@ -215,6 +217,7 @@ const MessageBubble = ({ message, isThinking = false, isDarkMode }) => {
 const AIResponseBlock = ({ response, isDarkMode }) => {
   const { thinking, answer, isThinkingComplete } = response;
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (thinking && !isThinkingComplete) {
@@ -236,7 +239,7 @@ const AIResponseBlock = ({ response, isDarkMode }) => {
               <div className={`p-4 rounded-lg shadow-md max-w-full ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
                 <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsThinkingOpen(!isThinkingOpen)}>
                   <h3 className="text-sm font-semibold" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>
-                    {isThinkingComplete ? 'Thinking Complete' : 'Thinking...'}
+                    {isThinkingComplete ? t.thinkingComplete || 'Thinking Complete' : t.thinking || 'Thinking...'}
                   </h3>
                   <ChevronDown className={`w-5 h-5 transition-transform ${isThinkingOpen ? 'rotate-0' : '-rotate-90'}`} style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }} />
                 </div>
@@ -265,6 +268,7 @@ const SuggestedPrompts = ({ prompts, onPromptClick, isDarkMode }) => {
   const LucideIconMap = {
     Lightbulb, FileText, Sparkles, Globe
   };
+  const { t } = useLanguage();
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl w-full">
@@ -284,10 +288,10 @@ const SuggestedPrompts = ({ prompts, onPromptClick, isDarkMode }) => {
               )}
               <div>
                 <h3 className={`text-sm font-semibold mb-1 ${isDarkMode ? 'text-dark-text-light' : 'text-gray-700'}`}>
-                  {prompt.title}
+                  {t[prompt.titleKey] || prompt.title}
                 </h3>
                 <p className={`text-xs ${isDarkMode ? 'text-dark-text-dark' : 'text-gray-700'}`}>
-                  {prompt.description}
+                  {t[prompt.descriptionKey] || prompt.description}
                 </p>
               </div>
             </div>
@@ -302,6 +306,7 @@ const SuggestedPrompts = ({ prompts, onPromptClick, isDarkMode }) => {
 const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, sidebarOpen, isDarkMode }) => {
   const textareaRef = useRef(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const { t } = useLanguage();
 
   // Notify parent about full screen state
   useEffect(() => {
@@ -367,7 +372,7 @@ const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, side
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Send a message..."
+              placeholder={t.sendMessage || "Send a message..."}
               className={`
                 w-full pl-4 pr-12 py-3 rounded-xl resize-none
                 focus:outline-none focus:ring-2 focus:ring-purple-gradient-start focus:border-transparent
@@ -383,7 +388,7 @@ const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, side
                 type="button"
                 onClick={handleToggleFullScreen}
                 className={`absolute right-2 top-2 p-2 rounded-xl ${isDarkMode ? 'hover:bg-dark-input-bg text-dark-text-dark' : 'hover:bg-gray-200 text-gray-700'}`}
-                aria-label={isFullScreen ? "Minimize" : "Maximize"}
+                aria-label={isFullScreen ? t.minimize || "Minimize" : t.maximize || "Maximize"}
               >
                 {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
@@ -399,7 +404,7 @@ const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, side
           </div>
           {/* Moved inside form to be part of the flex column, but still at the bottom */}
           <p className="text-xs text-center" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
-            Shianco Chat may generate inaccurate information about people, places, or facts.
+            {t.disclaimer || "Shianco Chat may generate inaccurate information about people, places, or facts."}
           </p>
         </form>
       </div>
@@ -411,6 +416,7 @@ const ChatInput = ({ value, onChange, onSend, disabled, onFullScreenToggle, side
 const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -441,7 +447,7 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
         className={`p-1 rounded-full ${isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-transparent'} text-dark-text-dark`}
-        aria-label="Conversation actions"
+        aria-label={t.conversationActions || "Conversation actions"}
       >
         <MoreVertical className="w-4 h-4" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }} />
       </button>
@@ -453,14 +459,14 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
             style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}
           >
             <Pencil className="w-4 h-4" />
-            <span>Rename</span>
+            <span>{t.rename || "Rename"}</span>
           </button>
           <button
             onClick={handleDeleteClick}
             className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-dark-input-bg rounded-b-lg"
           >
             <Trash className="w-4 h-4" />
-            <span>Delete</span>
+            <span>{t.delete || "Delete"}</span>
           </button>
         </div>
       )}
