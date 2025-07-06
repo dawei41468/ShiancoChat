@@ -387,7 +387,7 @@ function App() {
 
   // Removed direct useContext call outside of LanguageProvider scope
   return (
-    <div className={`flex h-screen font-medium ${isDarkMode ? 'bg-dark-background text-dark-text-light' : 'bg-light-background text-light-text-dark'}`}>
+    <div className={`flex h-screen font-medium ${isDarkMode ? 'dark-theme-bg text-dark-text-light' : 'bg-light-background text-light-text-dark'}`}>
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -433,7 +433,7 @@ function App() {
             />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto pb-[236px]"> {/* Adjusted padding-bottom for new ChatInput fixed height */}
+          <div className={`flex-1 overflow-y-auto pb-[236px] ${isDarkMode ? 'dark-theme-chat-window' : 'bg-white'}`}> {/* Adjusted padding-bottom for new ChatInput fixed height */}
             <div className="max-w-4xl mx-auto p-4 space-y-4">
               {messages.map((message) => (
                 message.sender === 'user' ? (
