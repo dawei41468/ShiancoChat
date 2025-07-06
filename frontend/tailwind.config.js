@@ -12,7 +12,7 @@ module.exports = {
           'card': '#20203A',
           'text-light': '#E0E0E0',
           'text-dark': '#CCCCCC',
-          'border': '#4A4A6A',
+          'border': '#2A2A4A',
           'input-bg': '#2A2A4A',
         },
         purple: {
