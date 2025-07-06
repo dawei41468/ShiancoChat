@@ -53,6 +53,7 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
 
 // Sidebar Component
 const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversation, currentConversationId, onRenameConversation, onDeleteConversation, isDarkMode }) => {
+  const [language, setLanguage] = useState('EN');
   const sidebarItems = [
     { icon: Home, label: 'Home', active: true },
     { icon: Rocket, label: 'Getting Started', active: false },
@@ -150,8 +151,19 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
           <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
             <ChatBubbleIcon className="w-6 h-6" stroke="currentColor" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 flex items-center space-x-4">
             <p className="text-sm font-semibold" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>Shianco User</p>
+            <button className="text-xs font-medium px-1 py-0.5 border-none rounded-md transition-colors overflow-hidden" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }} onClick={() => setLanguage(language === 'EN' ? 'CN' : 'EN')}>
+              <div className="flex items-center">
+                <span className={`px-0.5 py-0.5 ${language === 'EN' ? 'bg-purple-gradient text-white font-extrabold rounded-md' : ''}`}>
+                  EN
+                </span>
+                <span style={{ fontWeight: 900 }}>|</span>
+                <span className={`px-0.5 py-0.5 ${language === 'CN' ? 'bg-purple-gradient text-white font-extrabold rounded-md' : ''}`}>
+                  中文
+                </span>
+              </div>
+            </button>
           </div>
         </div>
       </div>
