@@ -132,7 +132,7 @@ const Sidebar = ({ isOpen, onToggle, isDarkMode }) => {
                   <ChatBubbleIcon className="w-5 h-5" stroke="currentColor" isDarkMode={isDarkMode} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>
-                      {conversation.title}
+                      {t.language === 'CN' ? conversation.title.substring(0, 10) + (conversation.title.length > 10 ? '...' : '') : conversation.title}
                     </p>
                     {/* Optionally display last updated timestamp if available and desired */}
                     {/* <p className="text-xs" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
