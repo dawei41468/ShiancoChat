@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom'; // Import useLocation and useNavigate
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   ChevronDown, Send, Plus, Settings, Home, Rocket, Star, Zap, Book, HelpCircle, Users, Heart, Shield, Lightbulb, FileText, Sparkles, Globe, Menu, MoreVertical, Pencil, Trash, Maximize2, Minimize2, Sun, Moon
 } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
+import { useChat } from './ChatContext'; // Import useChat
 
 // Custom Chat Bubble Icon Component
 const ChatBubbleIcon = ({ useGradient, ...props }) => {
@@ -40,27 +44,25 @@ const TopBar = ({ onToggleSidebar, selectedModel, isDarkMode, toggleTheme }) => 
           <span className={`text-sm font-medium ${isDarkMode ? 'text-dark-text-light' : 'text-gray-700'}`}>{selectedModel}</span>
         </div>
       </div>
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={toggleTheme}
-          className={`p-1 border rounded-full hover:bg-dark-hover transition-colors cursor-pointer z-50 ${isDarkMode ? 'bg-dark-card border-dark-border' : 'bg-gray-100 border-gray-300'}`}
-          aria-label={t.toggleTheme || "Toggle Light/Dark Mode"}
-        >
-          {!isDarkMode ? <Moon className={`w-4 h-4 ${isDarkMode ? 'text-dark-text-light' : 'text-gray-700'}`} /> : <Sun className="w-4 h-4 text-dark-text-light" />}
-        </button>
-      </div>
     </div>
   );
 };
 
 // Sidebar Component
-const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversation, currentConversationId, onRenameConversation, onDeleteConversation, isDarkMode }) => {
-  const { language, toggleLanguage, t } = useLanguage();
+const Sidebar = ({ isOpen, onToggle, isDarkMode }) => {
+  const { t } = useLanguage();
+  const { conversations, currentConversationId, handleNewChat, handleSelectConversation, handleRenameConversation, handleDeleteConversation } = useChat();
+  const location = useLocation(); // Get current location
+  const navigate = useNavigate(); // Get navigate function
+
+  // Remove language and toggleLanguage from Sidebar as they are handled in SettingsPage
+  // const { language, toggleLanguage, t } = useLanguage();
+
   const sidebarItems = [
-    { icon: Home, label: 'Home', active: true },
-    { icon: Book, label: 'Tutorials', active: false },
-    { icon: Settings, label: 'Settings', active: false },
-    { icon: HelpCircle, label: 'FAQ', active: false },
+    { icon: Home, label: 'Home', path: '/' },
+    { icon: Book, label: 'Tutorials', path: '/tutorials' },
+    { icon: Settings, label: 'Settings', path: '/settings' },
+    { icon: HelpCircle, label: 'FAQ', path: '/faq' },
   ];
 
   return (
@@ -74,7 +76,7 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
         </div>
         
         <button
-          onClick={onNewChat}
+          onClick={handleNewChat}
           className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity"
         >
           <Plus className="w-5 h-5 text-white" />
@@ -88,19 +90,23 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
             {t.navigation || "Navigation"}
           </h3>
           <nav className="space-y-1">
-            {sidebarItems.map((item, index) => (
-              <button
-                key={index}
-                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-left ${
-                  item.active
-                    ? 'bg-purple-gradient text-white'
-                    : `${isDarkMode ? 'hover:bg-dark-card text-dark-text-light' : 'hover:bg-gray-100 text-black'}`
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{t[item.label.toLowerCase().replace(' ', '')] || item.label}</span>
-              </button>
-            ))}
+            {sidebarItems.map((item, index) => {
+              const isActive = location.pathname === item.path; // Check if current path matches item's path
+              return (
+                <button
+                  key={index}
+                  onClick={() => window.location.href = item.path} // Use item.path for navigation
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-left ${
+                    isActive // Apply active class based on isActive
+                      ? 'bg-purple-gradient text-white'
+                      : `${isDarkMode ? 'hover:bg-dark-card text-dark-text-light' : 'hover:bg-gray-100 text-black'}`
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="text-sm font-medium">{t[item.label.toLowerCase().replace(' ', '')] || item.label}</span>
+                </button>
+              );
+            })}
           </nav>
         </div>
 
@@ -116,7 +122,10 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
                   ${conversation.id === currentConversationId ? (isDarkMode ? 'bg-dark-card-selected' : 'bg-gray-200') : (isDarkMode ? 'hover:bg-dark-card' : 'hover:bg-gray-100')}`}
               >
                 <button
-                  onClick={() => onSelectConversation(conversation.id)}
+                  onClick={() => {
+                    handleSelectConversation(conversation.id);
+                    navigate('/'); // Navigate to the home chat page
+                  }}
                   className="flex-1 flex items-start space-x-3 p-3 text-left"
                 >
                   <ChatBubbleIcon className="w-5 h-5" stroke="currentColor" isDarkMode={isDarkMode} />
@@ -133,8 +142,8 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
                 <div className="absolute right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200">
                   <ConversationActions
                     conversationId={conversation.id}
-                    onRename={onRenameConversation}
-                    onDelete={onDeleteConversation}
+                    onRename={handleRenameConversation}
+                    onDelete={handleDeleteConversation}
                     isDarkMode={isDarkMode}
                   />
                 </div>
@@ -152,17 +161,6 @@ const Sidebar = ({ isOpen, onToggle, conversations, onNewChat, onSelectConversat
           </div>
           <div className="flex-1 flex items-center space-x-4">
             <p className="text-sm font-semibold mr-4" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>{t.userName}</p>
-            <button className="text-xs font-medium px-1 py-0.5 border-none rounded-md transition-colors overflow-hidden ml-4" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }} onClick={toggleLanguage}>
-              <div className="flex items-center">
-                <span className={`px-0.5 py-0.5 ${language === 'EN' ? 'bg-purple-gradient text-white font-extrabold rounded-md' : ''}`}>
-                  EN
-                </span>
-                <span style={{ fontWeight: 900 }}>|</span>
-                <span className={`px-0.5 py-0.5 ${language === 'CN' ? 'bg-purple-gradient text-white font-extrabold rounded-md' : ''}`}>
-                  中文
-                </span>
-              </div>
-            </button>
           </div>
         </div>
       </div>
@@ -250,8 +248,14 @@ const AIResponseBlock = ({ response, isDarkMode }) => {
             </div>
           )}
           {answer && (
-            <div className={`px-4 py-3 rounded-2xl font-semibold whitespace-pre-wrap ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-800'}`}>
-              <p className="text-sm leading-relaxed">{answer}</p>
+            <div className={`px-4 py-3 rounded-2xl font-semibold ${isDarkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-800'}`}>
+              <ReactMarkdown
+                key={isThinkingComplete ? 'complete' : 'streaming'}
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({node, ...props}) => <p className="text-sm leading-relaxed" {...props} />
+                }}
+              >{answer}</ReactMarkdown>
             </div>
           )}
         </div>

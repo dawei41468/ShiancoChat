@@ -72,7 +72,45 @@ const translations = {
     prompt3Title: "创意火花",
     prompt3Description: "获取写作或项目的创意帮助",
     prompt4Title: "语言练习",
-    prompt4Description: "练习任何语言的会话技能"
+    prompt4Description: "练习任何语言的会话技能",
+    // Tutorials Page
+    tutorialsTitle: "教程",
+    tutorialsWelcome: "欢迎来到 ShiancoChat 内部 AI 教程。在这里您将学习如何使用助手进行日常工作。",
+    quickStartTitle: "快速开始",
+    quickStart1: "从侧边栏打开新聊天",
+    quickStart2: "清晰具体地输入您的请求",
+    quickStart3: "仔细审查 AI 回复",
+    recommendedUseCasesTitle: "推荐用例",
+    useCase1: "起草专业电子邮件",
+    useCase2: "总结报告",
+    useCase3: "翻译（英文/中文）",
+    useCase4: "撰写营销文案",
+    examplePromptsTitle: "示例提示",
+    examplePrompt1: "撰写一封正式的道歉邮件给供应商。",
+    examplePrompt2: "用3个要点总结这份会议记录。",
+    examplePrompt3: "将此文本翻译成中文。",
+    // FAQ Page
+    faqTitle: "常见问题",
+    faqQuestion1: "ShiancoChat 是什么？",
+    faqAnswer1: "ShiancoChat 是我们内部的 AI 助手，使用安全的、公司托管的模型。它可以帮助您进行写作、总结、翻译等。",
+    faqQuestion2: "我的数据是私密的吗？",
+    faqAnswer2: "是的。所有对话都保留在公司安全的服务器内。不会向外部提供商发送任何数据。",
+    faqQuestion3: "它可以帮助完成哪些任务？",
+    faqAnswer3: "起草电子邮件、总结文档、翻译、研究支持、营销文案、代码辅助。",
+    faqQuestion4: "我应该联系谁寻求支持？",
+    faqAnswer4: "请联系 IT / AI 管理团队 [内部电子邮件或链接]。",
+    // Settings Page
+    settingsTitle: "设置",
+    theme: "主题",
+    light: "浅色",
+    dark: "深色",
+    currentTheme: "当前主题:",
+    language: "语言",
+    english: "英语",
+    chinese: "中文",
+    currentLanguage: "当前语言:",
+    dataManagement: "数据管理",
+    clearConversationHistory: "清除对话历史"
   }
 };
 
@@ -84,10 +122,18 @@ export const useLanguage = () => useContext(LanguageContext);
 
 // Language Provider component
 export const LanguageProvider = ({ children }) => {
-  const [language, setLanguage] = useState('EN');
+  const [language, setLanguage] = useState(() => {
+    const savedLanguage = localStorage.getItem('appLanguage');
+    return savedLanguage ? savedLanguage : 'EN';
+  });
 
-  const toggleLanguage = () => {
-    setLanguage(prev => (prev === 'EN' ? 'CN' : 'EN'));
+  // Persist language to localStorage whenever it changes
+  React.useEffect(() => {
+    localStorage.setItem('appLanguage', language);
+  }, [language]);
+
+  const toggleLanguage = (newLang) => {
+    setLanguage(newLang);
   };
 
   return (
