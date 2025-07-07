@@ -10,7 +10,7 @@ import { useChat } from './ChatContext'; // Import useChat
 
 // Custom Chat Bubble Icon Component
 const ChatBubbleIcon = ({ useGradient, isDarkMode, ...props }) => {
-  const strokeColor = useGradient ? "url(#chat-bubble-gradient)" : (isDarkMode ? "#FFFFFF" : "#333333");
+  const strokeColor = useGradient ? "url(#chat-bubble-gradient)" : "#FFFFFF";
   return (
     <svg {...props} fill="none" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -122,8 +122,10 @@ const Sidebar = ({ isOpen, onToggle, isDarkMode }) => {
               >
                 <button
                   onClick={() => {
-                    handleSelectConversation(conversation.id);
-                    navigate('/'); // Navigate to the home chat page
+                    if (conversation.id !== currentConversationId) {
+                      handleSelectConversation(conversation.id);
+                      navigate('/'); // Navigate to the home chat page
+                    }
                   }}
                   className="flex-1 flex items-start space-x-3 p-3 text-left"
                 >
