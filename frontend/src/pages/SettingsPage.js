@@ -13,13 +13,6 @@ export default function SettingsPage({ isDarkMode, toggleTheme }) {
 
         <ThemeSettings isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
         <LanguageSettings isDarkMode={isDarkMode} />
-
-        <section className="p-6 rounded-lg border" style={{ borderColor: isDarkMode ? '#444' : '#E0E0E0', backgroundColor: isDarkMode ? '#2D2D2D' : '#F9F9F9' }}>
-          <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{t.dataManagement || "Data Management"}</h2>
-          <button className={`px-6 py-3 rounded-lg font-semibold transition-colors ${isDarkMode ? 'bg-dark-input-bg text-red-400 hover:bg-dark-card' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
-            {t.clearConversationHistory || "Clear Conversation History"}
-          </button>
-        </section>
       </div>
     </div>
   );

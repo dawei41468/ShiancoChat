@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import './App.css';
-import { Components } from './components';
 import { LanguageProvider } from './LanguageContext';
 import { ChatProvider } from './ChatContext'; // Import ChatProvider
 import TutorialsPage from './pages/TutorialsPage';
 import FAQPage from './pages/FAQPage';
 import SettingsPage from './pages/SettingsPage';
-import ChatPage from './pages/ChatPage'; // Import ChatPage
-
-const { Sidebar, TopBar } = Components;
+import ChatPage from './pages/ChatPage';
+import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {

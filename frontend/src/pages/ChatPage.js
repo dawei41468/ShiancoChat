@@ -1,22 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { useChat } from '../ChatContext';
-import { Components } from '../components';
+import MessageBubble from '@/components/MessageBubble';
+import AIResponseBlock from '@/components/AIResponseBlock';
+import ChatInput from '@/components/ChatInput';
+import SuggestedPrompts from '@/components/SuggestedPrompts';
 
-const {
-  MessageBubble,
-  SuggestedPrompts,
-  ChatInput,
-  AIResponseBlock,
-} = Components;
 
 const ChatPage = ({ isDarkMode, sidebarOpen }) => {
   const {
     messages,
-    inputValue,
-    setInputValue,
-    isTyping,
-    handleSendMessage,
     handlePromptClick,
     chatEndRef,
     suggestedPrompts, // Assuming suggestedPrompts is also provided by context or passed down
@@ -90,7 +83,11 @@ const ChatPage = ({ isDarkMode, sidebarOpen }) => {
               message.sender === 'user' ? (
                 <MessageBubble key={message.id} message={message} isDarkMode={isDarkMode} />
               ) : (
-                <AIResponseBlock key={message.id} response={message} isDarkMode={isDarkMode} />
+                <AIResponseBlock
+                  key={`${message.id}-${message.isThinkingComplete ? 'complete' : 'streaming'}`}
+                  response={message}
+                  isDarkMode={isDarkMode}
+                />
               )
             ))}
             <div ref={chatEndRef} />
@@ -100,11 +97,6 @@ const ChatPage = ({ isDarkMode, sidebarOpen }) => {
 
       {/* Chat Input is fixed, so it's not part of the scrollable area */}
       <ChatInput
-        value={inputValue}
-        onChange={setInputValue}
-        onSend={handleSendMessage}
-        disabled={isTyping}
-        // onFullScreenToggle={setIsChatInputFullScreen} // This state is now in ChatContext
         sidebarOpen={sidebarOpen}
         isDarkMode={isDarkMode}
       />

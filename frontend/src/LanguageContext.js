@@ -109,8 +109,6 @@ const translations = {
     english: "英语",
     chinese: "中文",
     currentLanguage: "当前语言:",
-    dataManagement: "数据管理",
-    clearConversationHistory: "清除对话历史"
   }
 };
 

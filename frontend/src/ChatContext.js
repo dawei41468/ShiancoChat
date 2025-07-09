@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
+import * as apiService from '@/services/apiService';
 
 const ChatContext = createContext();
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100';
 
 export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
@@ -14,6 +12,7 @@ export const ChatProvider = ({ children }) => {
   const [creatingNewChat, setCreatingNewChat] = useState(false);
   const [isChatInputFullScreen, setIsChatInputFullScreen] = useState(false);
   const chatEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   // Fixed model for now
   const selectedModel = 'deepseek/deepseek-r1-0528-qwen3-8b';
@@ -26,29 +25,13 @@ export const ChatProvider = ({ children }) => {
     scrollToBottom();
   }, [messages]);
 
-  const fetchConversations = useCallback(async () => {
-    try {
-      const response = await axios.get(`${BACKEND_URL}/api/chat/conversations`);
-      setConversations(response.data);
-      if (response.data.length > 0) {
-        if (!currentConversationId) {
-          setCurrentConversationId(response.data[0].id);
-        }
-      } else {
-        setCurrentConversationId(null);
-      }
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-    }
-  }, [currentConversationId]);
-
   const fetchMessages = useCallback(async (conversationId) => {
     if (!conversationId) {
       setMessages([]);
       return;
     }
     try {
-      const response = await axios.get(`${BACKEND_URL}/api/chat/conversations/${conversationId}/messages`);
+      const response = await apiService.fetchMessagesForConversation(conversationId);
       setMessages(response.data.map(msg => {
         let thinkingContent = '';
         let answerContent = msg.text;
@@ -79,18 +62,51 @@ export const ChatProvider = ({ children }) => {
     }
   }, []);
 
-  useEffect(() => {
-    if (!creatingNewChat) {
-      fetchConversations();
+  const fetchConversations = useCallback(async () => {
+    try {
+      const response = await apiService.fetchConversations();
+      setConversations(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      setConversations([]);
+      return [];
     }
-  }, [fetchConversations, creatingNewChat]);
+  }, []);
+
+  const handleNewChat = useCallback(async () => {
+    try {
+      const response = await apiService.createNewChat("New Chat");
+      const newConversation = response.data;
+      await fetchConversations(); // Refetch the list to ensure it's sorted correctly
+      setCurrentConversationId(newConversation.id);
+      setMessages([]);
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
+  }, [fetchConversations]);
+
+  useEffect(() => {
+    const initialize = async () => {
+      const convos = await fetchConversations();
+      if (convos.length > 0) {
+        // Set currentConversationId only if it's not already set.
+        // This prevents resetting the view on hot-reloads.
+        setCurrentConversationId(currentId => currentId || convos[0].id);
+      } else {
+        // If there are no conversations, create a new one.
+        await handleNewChat();
+      }
+    };
+    initialize();
+  }, [fetchConversations, handleNewChat]);
 
   useEffect(() => {
     fetchMessages(currentConversationId);
   }, [currentConversationId, fetchMessages]);
 
   const handleSendMessage = async (text) => {
-    if (!text.trim() || !currentConversationId) return;
+    if (!text || !text.trim() || !currentConversationId) return;
 
     const userMessage = {
       id: Date.now().toString(),
@@ -115,176 +131,88 @@ export const ChatProvider = ({ children }) => {
     setInputValue('');
     setIsTyping(true);
 
+    // Create and store a new AbortController for this request
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const currentAIResponseMutable = { ...aiResponsePlaceholder };
+    const payload = {
+      conversation_id: currentConversationId,
+      sender: 'user',
+      text: text,
+      model: selectedModel,
+    };
 
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversation_id: currentConversationId,
-          sender: 'user',
-          text: text,
-          model: selectedModel,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let inThinkingBlock = false;
-      let fullThinkingContent = ''; // Accumulate thinking content
-      let fullAnswerContent = ''; // Accumulate answer content
-
-      const processTextContent = (text) => {
-        // Append raw text to a temporary 'rawText' property for debugging
-        currentAIResponseMutable.rawText = (currentAIResponseMutable.rawText || '') + text;
-
-        // Process the incoming text chunk
-        let remainingText = text;
-
-        // Check for opening <think> tag
-        if (!inThinkingBlock && remainingText.includes('<think>')) {
-          inThinkingBlock = true;
-          // Add any text before <think> to answer
-          const parts = remainingText.split('<think>', 2);
-          fullAnswerContent += parts[0];
-          remainingText = parts[1];
-        }
-
-        // Accumulate thinking content
-        if (inThinkingBlock) {
-          if (remainingText.includes('</think>')) {
-            const parts = remainingText.split('</think>', 2);
-            fullThinkingContent += parts[0];
-            remainingText = parts[1];
-            inThinkingBlock = false; // Thinking block is complete
-            currentAIResponseMutable.isThinkingComplete = true;
-          } else {
-            fullThinkingContent += remainingText;
-            remainingText = '';
-          }
-        }
-
-        // Accumulate answer content after thinking block
-        if (!inThinkingBlock && remainingText) {
-          fullAnswerContent += remainingText;
-        }
-
-        // Update the mutable response object
-        currentAIResponseMutable.thinking = fullThinkingContent.trim();
-        currentAIResponseMutable.answer = fullAnswerContent.trim();
-        currentAIResponseMutable.isThinkingComplete = !inThinkingBlock; // Set to true if not in thinking block
-
-        setMessages(prevMessages => {
-          const newMessages = [...prevMessages];
-          const index = newMessages.findIndex(msg => msg.id === aiResponseId);
-          if (index !== -1) {
-            newMessages[index] = { ...currentAIResponseMutable };
-          }
-          return newMessages;
-        });
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        const chunk = decoder.decode(value, { stream: true });
-
-        if (done) {
-          // Post-process the fullAnswerContent to convert custom markers to standard markdown
-          fullAnswerContent = fullAnswerContent
-            .replace(/###\s*/g, '\n\n### ') // Convert ### to markdown heading with newlines
-            .replace(/\|\|\s*/g, '\n\n'); // Convert || to double newline for paragraph breaks
-
-          const lines = buffer.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              processTextContent(line.substring('data: '.length));
-            }
-          }
-          // Ensure thinking is marked complete at the end of stream
-          currentAIResponseMutable.isThinkingComplete = true;
-          setMessages(prevMessages => {
-            const newMessages = [...prevMessages];
-            const index = newMessages.findIndex(msg => msg.id === aiResponseId);
-            if (index !== -1) {
-              newMessages[index] = { ...currentAIResponseMutable };
-            }
-            return newMessages;
-          });
-          break;
-        }
-
-        buffer += chunk;
-
-        let messageEndIndex;
-        while ((messageEndIndex = buffer.indexOf('\n\n')) !== -1) {
-          const messageBlock = buffer.substring(0, messageEndIndex);
-          buffer = buffer.substring(messageEndIndex + 2);
-
-          const lines = messageBlock.split('\n');
-          let currentSSEData = '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              currentSSEData += line.substring('data: '.length);
-            }
-          }
-          processTextContent(currentSSEData);
-        }
-      }
-
-      // Temporarily comment out fetchConversations to isolate streaming issue
-      // fetchConversations();
-
-    } catch (error) {
-      console.error('Error during streaming response:', error);
-      setMessages(prev => {
-        const newMessages = [...prev];
+    const updateAIResponse = (updates) => {
+      setMessages(prevMessages => {
+        const newMessages = [...prevMessages];
         const index = newMessages.findIndex(msg => msg.id === aiResponseId);
         if (index !== -1) {
-          newMessages[index] = {
-            ...newMessages[index],
-            answer: 'Error: Could not get a response. Please try again.',
-            isThinkingComplete: true,
-            thinking: newMessages[index].thinking || ''
-          };
-        } else {
-          newMessages.push({
-            id: Date.now().toString(),
-            sender: 'assistant',
-            text: 'Error: Could not get a response. Please try again.',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          });
+          newMessages[index] = { ...newMessages[index], ...updates };
         }
         return newMessages;
       });
-    } finally {
-      setIsTyping(false);
-    }
+    };
+
+    await apiService.streamChatResponse(payload, {
+      signal: abortControllerRef.current.signal,
+      onData: (data) => {
+        updateAIResponse({
+          thinking: data.thinking.trim(),
+          answer: data.answer.trim(),
+        });
+      },
+      onComplete: (finalData) => {
+        abortControllerRef.current = null;
+        setIsTyping(false);
+        const finalAnswer = finalData.answer
+          .replace(/###\s*/g, '\n\n### ')
+          .replace(/\|\|\s*/g, '\n\n');
+        
+        updateAIResponse({ 
+            answer: finalAnswer.trim(),
+            thinking: finalData.thinking.trim(),
+            isThinkingComplete: true 
+        });
+        // fetchConversations(); // Re-enable if you want to refresh conversations list after each message
+      },
+      onError: (error) => {
+        abortControllerRef.current = null;
+        console.error('Error during streaming response:', error);
+        setIsTyping(false);
+        updateAIResponse({
+          answer: 'Error: Could not get a response. Please try again.',
+          isThinkingComplete: true,
+        });
+      },
+    });
   };
 
   const handlePromptClick = (prompt) => {
     handleSendMessage(prompt.description);
   };
 
-  const handleNewChat = async () => {
-    try {
-      const response = await axios.post(`${BACKEND_URL}/api/chat/new`, { title: "New Chat" });
-      setCurrentConversationId(response.data.id);
-      setMessages([]);
-    } catch (error) {
-      console.error('Error creating new chat:', error);
-    } finally {
-      setCreatingNewChat(false);
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsTyping(false);
+      // Update the last message to indicate it was stopped
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMessageIndex = newMessages.length - 1;
+        if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].sender === 'assistant') {
+          const lastMessage = newMessages[lastMessageIndex];
+          newMessages[lastMessageIndex] = {
+            ...lastMessage,
+            answer: lastMessage.answer ? lastMessage.answer + ' [Stopped]' : 'Generation stopped.',
+            isThinkingComplete: true,
+          };
+        }
+        return newMessages;
+      });
     }
-  };
-
+  }, []);
   const handleSelectConversation = (conversationId) => {
     setCurrentConversationId(conversationId);
     setMessages([]);
@@ -294,7 +222,7 @@ export const ChatProvider = ({ children }) => {
     const newTitle = prompt("Enter new title for the conversation:");
     if (newTitle && newTitle.trim() !== "") {
       try {
-        await axios.put(`${BACKEND_URL}/api/chat/conversations/${conversationId}`, { new_title: newTitle });
+        await apiService.renameConversation(conversationId, newTitle);
         fetchConversations();
       } catch (error) {
         console.error('Error renaming conversation:', error);
@@ -306,15 +234,17 @@ export const ChatProvider = ({ children }) => {
   const handleDeleteConversation = async (conversationId) => {
     if (window.confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
       try {
-        await axios.delete(`${BACKEND_URL}/api/chat/conversations/${conversationId}`);
-        await fetchConversations();
+        await apiService.deleteConversation(conversationId);
+        const remainingConversations = await fetchConversations();
 
         if (currentConversationId === conversationId) {
-          setMessages([]);
-        }
-        const updatedConversationsResponse = await axios.get(`${BACKEND_URL}/api/chat/conversations`);
-        if (updatedConversationsResponse.data.length === 0) {
-          handleNewChat();
+          if (remainingConversations.length > 0) {
+            // If other conversations exist, switch to the first one
+            setCurrentConversationId(remainingConversations[0].id);
+          } else {
+            // If no conversations are left, create a new one
+            await handleNewChat();
+          }
         }
       } catch (error) {
         console.error('Error deleting conversation:', error);
@@ -346,6 +276,7 @@ export const ChatProvider = ({ children }) => {
     handleSendMessage,
     handlePromptClick,
     handleNewChat,
+    handleStopGeneration,
     handleSelectConversation,
     handleRenameConversation,
     handleDeleteConversation,
