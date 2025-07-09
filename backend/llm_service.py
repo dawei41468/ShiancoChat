@@ -2,6 +2,7 @@ import json
 import os
 import logging
 import httpx # Import httpx for asynchronous requests
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 
 
@@ -12,6 +13,7 @@ class LLMService:
     def __init__(self, base_url: str):
         self.base_url = base_url
 
+    @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(min=1, max=10))
     async def generate_response(self, model: str, messages: list):
         lm_studio_messages = []
         for msg in messages:
@@ -22,7 +24,7 @@ class LLMService:
             "messages": lm_studio_messages,
             "stream": True # Enable streaming
         }
-        
+
         try:
             async with httpx.AsyncClient(timeout=120) as client:
                 async with client.stream("POST", f"{self.base_url}/v1/chat/completions", json=payload, headers={"Content-Type": "application/json"}) as response:
@@ -45,8 +47,12 @@ class LLMService:
                                     logger.warning(f"Failed to decode JSON from chunk: {json_data}")
                                     continue
         except httpx.RequestError as e:
-            logger.error(f"Error communicating with LLM service at {self.base_url}: {e}")
-            yield "Error: Could not get response from LLM."
+            # This is the crucial change. We log the specific error and then
+            # re-raise it. This allows the @retry decorator to catch the
+            # exception and try again.
+            logger.error(f"An httpx error occurred: {e}")
+            # Re-raise the exception to allow tenacity to handle retries
+            raise
 
     def get_available_models(self):
         # Since we are using a fixed local model, we return it directly.
