@@ -58,18 +58,6 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
       right: '0px' // Ensure it always extends to the right edge
     }}>
       <div className={`mx-auto flex-1 flex flex-col w-full max-w-4xl`}>
-        {isTyping && (
-          <div className="flex justify-center mb-2">
-            <button
-              onClick={handleStopGeneration}
-              type="button"
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-colors ${isDarkMode ? 'bg-dark-card border-dark-border hover:bg-dark-input-bg text-dark-text-light' : 'bg-gray-100 border-gray-300 hover:bg-gray-200 text-gray-800'}`}
-            >
-              <Square className="w-4 h-4" />
-              <span>Stop generating</span>
-            </button>
-          </div>
-        )}
         <form onSubmit={handleSubmit} className={`relative flex flex-col h-full`}>
           <div className="relative flex-1 mb-2">
             <textarea
@@ -99,9 +87,24 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
               </button>
           </div>
           <div className="flex justify-end items-center mb-2">
-            <button type="submit" disabled={!inputValue.trim() || isTyping} className="p-2 bg-purple-gradient hover:opacity-90 disabled:bg-dark-border disabled:cursor-not-allowed rounded-xl transition-opacity">
-              <Send className="w-5 h-5 text-white" />
-            </button>
+            {isTyping ? (
+              <button
+                onClick={handleStopGeneration}
+                type="button"
+                className={`p-2 rounded-xl transition-colors ${isDarkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'}`}
+                aria-label="Stop generating"
+              >
+                <Square className="w-5 h-5 text-white" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!inputValue.trim()}
+                className="p-2 bg-purple-gradient hover:opacity-90 disabled:bg-dark-border disabled:cursor-not-allowed rounded-xl transition-opacity"
+              >
+                <Send className="w-5 h-5 text-white" />
+              </button>
+            )}
           </div>
           <p className="text-xs text-center" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
             {t.disclaimer || "Shianco Chat may generate inaccurate information about people, places, or facts."}
