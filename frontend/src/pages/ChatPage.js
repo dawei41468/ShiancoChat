@@ -5,6 +5,7 @@ import MessageBubble from '@/components/MessageBubble';
 import AIResponseBlock from '@/components/AIResponseBlock';
 import ChatInput from '@/components/ChatInput';
 import SuggestedPrompts from '@/components/SuggestedPrompts';
+import ShiancoChatHeader from '@/components/ShiancoChatHeader';
 
 
 const ChatPage = ({ sidebarOpen }) => {
@@ -50,14 +51,14 @@ const ChatPage = ({ sidebarOpen }) => {
   return (
     <div className="flex-1 flex flex-col bg-background">
       {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-24">
+        <div className="flex-1 flex flex-col items-center justify-center p-36">
           <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-purple-gradient rounded-full flex items-center justify-center mb-4 mx-auto">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
-              </svg>
+            <div className="mb-4 mx-auto flex flex-col items-center">
+              <ShiancoChatHeader
+                iconClassName="w-12 h-12"
+                textClassName="text-4xl"
+              />
             </div>
-            <h1 className="text-3xl font-bold mb-2 bg-purple-gradient bg-clip-text text-transparent">ShiancoChat</h1>
             <p className="text-lg text-text-secondary">
               {t.welcomeMessage}
             </p>
