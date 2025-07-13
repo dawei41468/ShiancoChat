@@ -22,7 +22,7 @@ const TopBar = ({ onToggleSidebar }) => {
           <select
             value={selectedModel || ''}
             onChange={(e) => handleModelChange(e.target.value)}
-            className="text-sm font-medium text-text-primary bg-surface border-none focus:ring-0"
+            className="text-sm font-medium text-text-primary bg-surface border-none"
           >
             {availableModels.map((model) => (
               <option key={model} value={model}>

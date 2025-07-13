@@ -90,6 +90,12 @@ code {
     border-radius: 3px;
 }
 
+/* Remove focus ring from select */
+select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 ::-webkit-scrollbar-thumb:hover {
     background: var(--color-scrollbar-thumb-hover);
 }
