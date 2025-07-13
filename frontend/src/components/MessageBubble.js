@@ -6,15 +6,15 @@ const MessageBubble = ({ message, isThinking = false }) => {
 
   const bubbleClasses = `px-4 py-3 rounded-2xl transition-all duration-300 ease-in-out font-medium whitespace-pre-wrap ${
     isUser
-      ? 'bg-orange-600 text-white'
+      ? 'bg-user-bubble-background text-user-bubble-text'
       : 'bg-surface text-text-primary'
   } ${isThinking ? 'min-w-[100px] max-w-full' : ''}`;
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`flex max-w-3xl ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white ${
-          isUser ? 'bg-orange-600 ml-3' : 'bg-surface mr-3'
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+          isUser ? 'bg-user-bubble-background text-user-bubble-text ml-3' : 'bg-surface text-text-primary mr-3'
         }`}>
           {isUser ? (
             <span className="text-sm font-bold">U</span>
