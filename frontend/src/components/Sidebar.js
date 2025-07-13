@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useChat } from '../ChatContext';
-import { useTheme } from '../ThemeContext'; // Import useTheme
+import { useTheme } from '../ThemeContext';
+import ShiancoChatHeader from './ShiancoChatHeader';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
 // Conversation Actions Dropdown Component
@@ -88,10 +89,7 @@ const Sidebar = ({ isOpen }) => {
       <div className={`sidebar ${isOpen ? 'w-72' : 'w-0'} transition-all duration-300 overflow-hidden bg-background border-r border-border flex flex-col`}>
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <ChatBubbleIcon className="w-6 h-6" useGradient={true} isDarkMode={theme === 'dark'} />
-              <span className="text-lg font-bold bg-purple-gradient bg-clip-text text-transparent">ShiancoChat</span>
-            </div>
+            <ShiancoChatHeader />
           </div>
           
           <button
