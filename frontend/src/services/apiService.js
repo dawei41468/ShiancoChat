@@ -25,6 +25,9 @@ export const renameConversation = (conversationId, newTitle) => {
 export const deleteConversation = (conversationId) => {
   return apiClient.delete(`/api/chat/conversations/${conversationId}`);
 };
+export const fetchAvailableModels = () => {
+  return apiClient.get('/api/llm/models');
+};
 
 export const streamChatResponse = async (payload, { onData, onComplete, onError, signal }) => {
   try {

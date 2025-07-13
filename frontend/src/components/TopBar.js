@@ -1,9 +1,11 @@
 import React from 'react';
 import { useLanguage } from '@/LanguageContext';
+import { useChat } from '@/ChatContext';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
-const TopBar = ({ onToggleSidebar, selectedModel }) => {
+const TopBar = ({ onToggleSidebar }) => {
   const { t } = useLanguage();
+  const { availableModels, selectedModel, handleModelChange } = useChat();
 
   return (
     <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4">
@@ -17,7 +19,17 @@ const TopBar = ({ onToggleSidebar, selectedModel }) => {
         </button>
         
         <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-surface">
-          <span className="text-sm font-medium text-text-primary">{selectedModel}</span>
+          <select
+            value={selectedModel || ''}
+            onChange={(e) => handleModelChange(e.target.value)}
+            className="text-sm font-medium text-text-primary bg-surface border-none focus:ring-0"
+          >
+            {availableModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>

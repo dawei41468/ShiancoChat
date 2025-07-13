@@ -55,7 +55,16 @@ class LLMService:
             raise
 
     def get_available_models(self):
-        # Since we are using a fixed local model, we return it directly.
-        return ["deepseek/deepseek-r1-0528-qwen3-8b"]
+        try:
+            response = httpx.get(f"{self.base_url}/v1/models", timeout=10)
+            response.raise_for_status()
+            models_data = response.json()
+            # The expected format is a list of models, each with an 'id' field.
+            # We extract just the 'id' from each model object.
+            return [model['id'] for model in models_data.get('data', [])]
+        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            logger.error(f"Failed to fetch models from LLM service: {e}")
+            # Fallback to a default model if the service is unavailable
+            return ["deepseek/deepseek-r1-0528-qwen3-8b"]
 
 llm_service = LLMService(base_url=os.environ.get("LLM_BASE_URL", "http://localhost:1234"))
