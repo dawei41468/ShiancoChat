@@ -3,16 +3,16 @@ import { useLanguage } from '../LanguageContext';
 import ThemeSettings from '../components/ThemeSettings';
 import LanguageSettings from '../components/LanguageSettings';
 
-export default function SettingsPage({ isDarkMode, toggleTheme }) {
+export default function SettingsPage() {
   const { t } = useLanguage();
 
   return (
-    <div className={`flex-1 overflow-y-auto overscroll-y-contain p-8 transition-colors duration-300 ${isDarkMode ? 'dark-theme-bg text-dark-text-light' : 'bg-white text-gray-900'}`}>
+    <div className="flex-1 overflow-y-auto overscroll-y-contain p-8 transition-colors duration-300 bg-background text-text-primary">
       <div className="max-w-3xl mx-auto">
-        <h1 className={`text-4xl font-extrabold mb-8 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{t.settingsTitle || "Settings"}</h1>
+        <h1 className="text-4xl font-extrabold mb-8 text-text-primary">{t.settingsTitle || "Settings"}</h1>
 
-        <ThemeSettings isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
-        <LanguageSettings isDarkMode={isDarkMode} />
+        <ThemeSettings />
+        <LanguageSettings />
       </div>
     </div>
   );

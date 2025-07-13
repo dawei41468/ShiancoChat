@@ -2,10 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-    box-sizing: border-box;
+/* 
+  ========================================
+  THEME DEFINITION (CSS Custom Properties)
+  ========================================
+*/
+:root {
+  --color-background: #151525;
+  --color-surface: #20203A;
+  --color-surface-selected: #2A2A4A;
+  --color-text-primary: #E0E0E0;
+  --color-text-secondary: #CCCCCC;
+  --color-border: #2A2A4A;
+  --color-hover: #2A2A4A;
+  --color-scrollbar-track: #1f2937;
+  --color-scrollbar-thumb: #4b5563;
+  --color-scrollbar-thumb-hover: #6b7280;
+
+  --color-purple-gradient-start: #6B46C1;
+  --color-purple-gradient-end: #3B82F6;
 }
 
+[data-theme="light"] {
+  --color-background: #FFFFFF;
+  --color-surface: #F5F5F5;
+  --color-surface-selected: #E8E8E8;
+  --color-text-primary: #333333;
+  --color-text-secondary: #666666;
+  --color-border: #E0E0E0;
+  --color-hover: #E0E0E0;
+  --color-scrollbar-track: #F0F0F0;
+  --color-scrollbar-thumb: #D0D0D0;
+  --color-scrollbar-thumb-hover: #B0B0B0;
+}
+
+/* 
+  ========================================
+  GLOBAL STYLES
+  ========================================
+*/
 html, body {
     margin: 0;
     padding: 0;
@@ -15,8 +50,9 @@ html, body {
         "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #111827;
-    color: #ffffff;
+    
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
 }
 
 #root {
@@ -28,20 +64,42 @@ code {
         monospace;
 }
 
+/* 
+  ========================================
+  CUSTOM UTILITIES & ANIMATIONS
+  ========================================
+*/
+
 /* Scrollbar customization */
 ::-webkit-scrollbar {
     width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #1f2937;
+    background: var(--color-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #4b5563;
+    background: var(--color-scrollbar-thumb);
     border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
+    background: var(--color-scrollbar-thumb-hover);
+}
+
+/* Animations */
+.message-bubble {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

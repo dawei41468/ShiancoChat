@@ -3,7 +3,7 @@ import { Send, Maximize2, Minimize2, Square } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
 
-const ChatInput = ({ sidebarOpen, isDarkMode }) => {
+const ChatInput = ({ sidebarOpen }) => {
   const textareaRef = useRef(null);
   const { t } = useLanguage();
   const {
@@ -17,9 +17,8 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
   } = useChat();
 
   useEffect(() => {
-    // When entering/exiting full screen, ensure textarea height is recalculated
     if (textareaRef.current && !isChatInputFullScreen) {
-      textareaRef.current.style.height = '120px'; // Fixed 3-row height
+      textareaRef.current.style.height = '120px';
     }
   }, [isChatInputFullScreen]);
 
@@ -28,8 +27,8 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
     if (inputValue.trim() && !isTyping) {
       handleSendMessage(inputValue);
       if (textareaRef.current) {
-        textareaRef.current.style.height = '120px'; // Reset height after sending to 3 rows
-        setIsChatInputFullScreen(false); // Exit full screen if active
+        textareaRef.current.style.height = '120px';
+        setIsChatInputFullScreen(false);
       }
     }
   };
@@ -45,20 +44,18 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
     setIsChatInputFullScreen(prev => !prev);
   };
 
-  const fullScreenChatInputHeight = 'calc(100vh - 76px)'; // Adjusted for slightly less height in full screen
+  const fullScreenChatInputHeight = 'calc(100vh - 76px)';
 
   return (
-    <div className={`
-     fixed bottom-0 z-10
-     border-t p-4
-     transition-all duration-300 ease-in-out flex flex-col
-     ${isDarkMode ? 'border-dark-border dark-theme-bg' : 'border-gray-200 bg-white'}
-   `} style={{
-      left: sidebarOpen ? '288px' : '0px', // Adjust left based on sidebar state (updated for w-72)
-      right: '0px' // Ensure it always extends to the right edge
-    }}>
-      <div className={`mx-auto flex-1 flex flex-col w-full max-w-4xl`}>
-        <form onSubmit={handleSubmit} className={`relative flex flex-col h-full`}>
+    <div
+      className="fixed bottom-0 z-10 border-t p-4 transition-all duration-300 ease-in-out flex flex-col bg-background border-border"
+      style={{
+        left: sidebarOpen ? '288px' : '0px',
+        right: '0px',
+      }}
+    >
+      <div className="mx-auto flex-1 flex flex-col w-full max-w-4xl">
+        <form onSubmit={handleSubmit} className="relative flex flex-col h-full">
           <div className="relative flex-1 mb-2">
             <textarea
               ref={textareaRef}
@@ -69,29 +66,28 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
               className={`
                 w-full pl-4 pr-12 py-3 rounded-xl resize-none
                 focus:outline-none focus:ring-2 focus:ring-purple-gradient-start focus:border-transparent
-                font-medium
-                ${isDarkMode ? 'bg-dark-input-bg border-dark-border placeholder-dark-text-dark' : 'bg-gray-100 border-gray-300 placeholder-gray-500'}
+                font-medium bg-surface border-border placeholder-text-secondary text-text-primary
                 ${isChatInputFullScreen ? 'text-base' : 'text-sm'} overscroll-y-contain
               `}
               rows={isChatInputFullScreen ? undefined : 3}
               disabled={isTyping}
-              style={{ height: isChatInputFullScreen ? `calc(${fullScreenChatInputHeight} - 86px)` : '120px', color: isDarkMode ? '#E0E0E0' : '#333333' }}
+              style={{ height: isChatInputFullScreen ? `calc(${fullScreenChatInputHeight} - 86px)` : '120px' }}
             />
             <button
-                type="button"
-                onClick={handleToggleFullScreen}
-                className={`absolute right-2 top-2 p-2 rounded-xl ${isDarkMode ? 'hover:bg-dark-input-bg text-dark-text-dark' : 'hover:bg-gray-200 text-gray-700'}`}
-                aria-label={isChatInputFullScreen ? t.minimize || "Minimize" : t.maximize || "Maximize"}
-              >
-                {isChatInputFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
+              type="button"
+              onClick={handleToggleFullScreen}
+              className="absolute right-2 top-2 p-2 rounded-xl hover:bg-hover text-text-secondary"
+              aria-label={isChatInputFullScreen ? t.minimize || "Minimize" : t.maximize || "Maximize"}
+            >
+              {isChatInputFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
           </div>
           <div className="flex justify-end items-center mb-2">
             {isTyping ? (
               <button
                 onClick={handleStopGeneration}
                 type="button"
-                className={`p-2 rounded-xl transition-colors ${isDarkMode ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'}`}
+                className="p-2 rounded-xl transition-colors bg-red-600 hover:bg-red-700"
                 aria-label="Stop generating"
               >
                 <Square className="w-5 h-5 text-white" />
@@ -100,13 +96,13 @@ const ChatInput = ({ sidebarOpen, isDarkMode }) => {
               <button
                 type="submit"
                 disabled={!inputValue.trim()}
-                className="p-2 bg-purple-gradient hover:opacity-90 disabled:bg-dark-border disabled:cursor-not-allowed rounded-xl transition-opacity"
+                className="p-2 bg-purple-gradient hover:opacity-90 disabled:bg-border disabled:cursor-not-allowed rounded-xl transition-opacity"
               >
                 <Send className="w-5 h-5 text-white" />
               </button>
             )}
           </div>
-          <p className="text-xs text-center" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
+          <p className="text-xs text-center text-text-secondary">
             {t.disclaimer || "Shianco Chat may generate inaccurate information about people, places, or facts."}
           </p>
         </form>

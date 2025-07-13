@@ -5,10 +5,11 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useChat } from '../ChatContext';
+import { useTheme } from '../ThemeContext'; // Import useTheme
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
 // Conversation Actions Dropdown Component
-const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode }) => {
+const ConversationActions = ({ conversationId, onRename, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef(null);
     const { t } = useLanguage();
@@ -26,13 +27,13 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
     }, []);
   
     const handleRenameClick = (e) => {
-      e.stopPropagation(); // Prevent selecting conversation
+      e.stopPropagation();
       onRename(conversationId);
       setIsOpen(false);
     };
   
     const handleDeleteClick = (e) => {
-      e.stopPropagation(); // Prevent selecting conversation
+      e.stopPropagation();
       onDelete(conversationId);
       setIsOpen(false);
     };
@@ -41,28 +42,23 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
       <div className="relative" ref={menuRef}>
         <button
           onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-          className={`p-1 rounded-full ${isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-transparent'} text-dark-text-dark`}
+          className="p-1 rounded-full hover:bg-hover text-text-secondary"
           aria-label={t.conversationActions || "Conversation actions"}
         >
-          <MoreVertical className="w-4 h-4" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }} />
+          <MoreVertical className="w-4 h-4" />
         </button>
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-40 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
+          <div className="absolute right-0 mt-2 w-40 bg-surface border border-border rounded-lg shadow-lg z-10">
             <button
               onClick={handleRenameClick}
-              className={`flex items-center space-x-2 w-full px-4 py-2 text-sm rounded-t-lg transition-colors ${
-                isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-gray-200'
-              }`}
-              style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}
+              className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-text-primary hover:bg-hover rounded-t-lg"
             >
               <Pencil className="w-4 h-4" />
               <span>{t.rename || "Rename"}</span>
             </button>
             <button
               onClick={handleDeleteClick}
-              className={`flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 rounded-b-lg transition-colors ${
-                isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-gray-200'
-              }`}
+              className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-hover rounded-b-lg"
             >
               <Trash className="w-4 h-4" />
               <span>{t.delete || "Delete"}</span>
@@ -74,11 +70,12 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
 };
 
 // Sidebar Component
-const Sidebar = ({ isOpen, isDarkMode }) => {
+const Sidebar = ({ isOpen }) => {
     const { t } = useLanguage();
     const { conversations, currentConversationId, handleNewChat, handleSelectConversation, handleRenameConversation, handleDeleteConversation } = useChat();
     const location = useLocation();
     const navigate = useNavigate();
+    const { theme } = useTheme(); // Get theme from context
   
     const sidebarItems = [
       { icon: Home, label: 'Home', path: '/' },
@@ -88,27 +85,27 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
     ];
   
     return (
-      <div className={`sidebar ${isOpen ? 'w-72' : 'w-0'} transition-all duration-300 overflow-hidden ${isDarkMode ? 'dark-theme-bg border-r border-dark-border' : 'bg-white border-r border-gray-200'} flex flex-col`}>
-        <div className="p-4 border-b border-dark-border">
+      <div className={`sidebar ${isOpen ? 'w-72' : 'w-0'} transition-all duration-300 overflow-hidden bg-background border-r border-border flex flex-col`}>
+        <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
-              <ChatBubbleIcon className="w-6 h-6" useGradient={true} isDarkMode={isDarkMode} />
+              <ChatBubbleIcon className="w-6 h-6" useGradient={true} isDarkMode={theme === 'dark'} />
               <span className="text-lg font-bold bg-purple-gradient bg-clip-text text-transparent">ShiancoChat</span>
             </div>
           </div>
           
           <button
             onClick={handleNewChat}
-            className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity"
+            className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity text-white"
           >
-            <Plus className="w-5 h-5 text-white" />
-            <span className="font-medium" style={{ color: '#FFFFFF' }}>{t.newChat || "New Chat"}</span>
+            <Plus className="w-5 h-5" />
+            <span className="font-medium">{t.newChat || "New Chat"}</span>
           </button>
         </div>
   
         <div className="flex-1 overflow-y-auto">
           <div className="p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary">
               {t.navigation || "Navigation"}
             </h3>
             <nav className="space-y-1">
@@ -119,9 +116,7 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
                     key={item.path}
                     onClick={() => navigate(item.path)}
                     className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-left ${
-                      isActive
-                        ? 'bg-purple-gradient text-white'
-                        : `${isDarkMode ? 'hover:bg-dark-card text-dark-text-light' : 'hover:bg-gray-100 text-black'}`
+                      isActive ? 'bg-purple-gradient text-white' : 'hover:bg-hover text-text-primary'
                     }`}
                   >
                     <item.icon className="w-5 h-5" />
@@ -132,16 +127,17 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
             </nav>
           </div>
   
-          <div className="p-4 border-t border-dark-border">
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: isDarkMode ? '#CCCCCC' : '#333333' }}>
+          <div className="p-4 border-t border-border">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary">
               {t.recentConversations || "Recent Conversations"}
             </h3>
             <div className="space-y-2">
               {conversations.map((conversation) => (
                 <div
                   key={conversation.id}
-                  className={`relative group flex items-center w-full rounded-lg transition-colors
-                    ${conversation.id === currentConversationId ? (isDarkMode ? 'bg-dark-card-selected' : 'bg-gray-200') : (isDarkMode ? 'hover:bg-dark-card' : 'hover:bg-gray-100')}`}
+                  className={`relative group flex items-center w-full rounded-lg transition-colors ${
+                    conversation.id === currentConversationId ? 'bg-surface-selected' : 'hover:bg-hover'
+                  }`}
                 >
                   <button
                     onClick={() => {
@@ -152,9 +148,9 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
                     }}
                     className="flex-1 flex items-start space-x-3 p-3 text-left"
                   >
-                    <ChatBubbleIcon className="w-5 h-5" stroke="currentColor" isDarkMode={isDarkMode} />
+                    <ChatBubbleIcon className="w-5 h-5" stroke="currentColor" isDarkMode={theme === 'dark'} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>
+                      <p className="text-sm font-medium truncate text-text-primary">
                         {t.language === 'CN' ? conversation.title.substring(0, 10) + (conversation.title.length > 10 ? '...' : '') : conversation.title}
                       </p>
                     </div>
@@ -164,7 +160,6 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
                       conversationId={conversation.id}
                       onRename={handleRenameConversation}
                       onDelete={handleDeleteConversation}
-                      isDarkMode={isDarkMode}
                     />
                   </div>
                 </div>
@@ -173,13 +168,13 @@ const Sidebar = ({ isOpen, isDarkMode }) => {
           </div>
         </div>
   
-        <div className="p-4 border-t border-dark-border">
+        <div className="p-4 border-t border-border">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
               <ChatBubbleIcon className="w-6 h-6" stroke="#FFFFFF" />
             </div>
             <div className="flex-1 flex items-center space-x-4">
-              <p className="text-sm font-semibold mr-4" style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}>{t.userName}</p>
+              <p className="text-sm font-semibold mr-4 text-text-primary">{t.userName}</p>
             </div>
           </div>
         </div>
