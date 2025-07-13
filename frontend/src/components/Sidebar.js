@@ -50,7 +50,9 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
           <div className="absolute right-0 mt-2 w-40 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
             <button
               onClick={handleRenameClick}
-              className="flex items-center space-x-2 w-full px-4 py-2 text-sm hover:bg-dark-input-bg rounded-t-lg"
+              className={`flex items-center space-x-2 w-full px-4 py-2 text-sm rounded-t-lg transition-colors ${
+                isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-gray-200'
+              }`}
               style={{ color: isDarkMode ? '#E0E0E0' : '#333333' }}
             >
               <Pencil className="w-4 h-4" />
@@ -58,7 +60,9 @@ const ConversationActions = ({ conversationId, onRename, onDelete, isDarkMode })
             </button>
             <button
               onClick={handleDeleteClick}
-              className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-dark-input-bg rounded-b-lg"
+              className={`flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 rounded-b-lg transition-colors ${
+                isDarkMode ? 'hover:bg-dark-input-bg' : 'hover:bg-gray-200'
+              }`}
             >
               <Trash className="w-4 h-4" />
               <span>{t.delete || "Delete"}</span>
