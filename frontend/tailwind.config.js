@@ -19,6 +19,8 @@ module.exports = {
           'gradient-start': 'var(--color-purple-gradient-start)',
           'gradient-end': 'var(--color-purple-gradient-end)',
         },
+        'user-bubble-background': 'var(--color-user-bubble-background)',
+        'user-bubble-text': 'var(--color-user-bubble-text)',
         orange: '#F97316',
         blue: '#3B82F6',
         green: '#22C55E',
