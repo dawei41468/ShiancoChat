@@ -1,7 +1,7 @@
 import React from 'react';
 
 const ChatBubbleIcon = ({ useGradient, isDarkMode, stroke, ...props }) => {
-    const strokeColor = stroke || (useGradient ? "url(#chat-bubble-gradient)" : (isDarkMode ? "#FFFFFF" : "#000000"));
+    const strokeColor = stroke || (useGradient ? "url(#chat-bubble-gradient)" : "var(--color-text-primary)");
     return (
       <svg {...props} fill="none" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <defs>

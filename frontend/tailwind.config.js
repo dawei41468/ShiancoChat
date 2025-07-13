@@ -4,27 +4,27 @@ module.exports = {
     "./src/**/*.{js,jsx,ts,tsx}",
     "./public/index.html"
   ],
+  darkMode: 'class', // or 'media' if you prefer OS-level settings
   theme: {
     extend: {
       colors: {
-        dark: {
-          'background': '#151525',
-          'card': '#20203A',
-          'text-light': '#E0E0E0',
-          'text-dark': '#CCCCCC',
-          'border': '#2A2A4A',
-          'input-bg': '#2A2A4A',
-        },
+        background: 'var(--color-background)',
+        surface: 'var(--color-surface)',
+        'surface-selected': 'var(--color-surface-selected)',
+        'text-primary': 'var(--color-text-primary)',
+        'text-secondary': 'var(--color-text-secondary)',
+        border: 'var(--color-border)',
+        hover: 'var(--color-hover)',
         purple: {
-          'gradient-start': '#6B46C1',
-          'gradient-end': '#3B82F6',
+          'gradient-start': 'var(--color-purple-gradient-start)',
+          'gradient-end': 'var(--color-purple-gradient-end)',
         },
         orange: '#F97316',
         blue: '#3B82F6',
         green: '#22C55E',
       },
       backgroundImage: {
-        'purple-gradient': 'linear-gradient(to right, #6B46C1, #3B82F6)',
+        'purple-gradient': 'linear-gradient(to right, var(--color-purple-gradient-start), var(--color-purple-gradient-end))',
       },
     },
   },
