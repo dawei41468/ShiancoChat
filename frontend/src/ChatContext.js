@@ -13,9 +13,8 @@ export const ChatProvider = ({ children }) => {
   const [isChatInputFullScreen, setIsChatInputFullScreen] = useState(false);
   const chatEndRef = useRef(null);
   const abortControllerRef = useRef(null);
-
-  // Fixed model for now
-  const selectedModel = 'deepseek/deepseek-r1-0528-qwen3-8b';
+  const [availableModels, setAvailableModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(null);
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -86,8 +85,22 @@ export const ChatProvider = ({ children }) => {
     }
   }, [fetchConversations]);
 
+  const fetchAvailableModels = useCallback(async () => {
+    try {
+      const response = await apiService.fetchAvailableModels();
+      setAvailableModels(response.data.models);
+      // Set the first model as the default selected one
+      if (response.data.models.length > 0) {
+        setSelectedModel(response.data.models[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching available models:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const initialize = async () => {
+      await fetchAvailableModels();
       const convos = await fetchConversations();
       if (convos.length > 0) {
         // Set currentConversationId only if it's not already set.
@@ -99,7 +112,7 @@ export const ChatProvider = ({ children }) => {
       }
     };
     initialize();
-  }, [fetchConversations, handleNewChat]);
+  }, [fetchConversations, handleNewChat, fetchAvailableModels]);
 
   useEffect(() => {
     fetchMessages(currentConversationId);
@@ -253,6 +266,10 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
+  const handleModelChange = (model) => {
+    setSelectedModel(model);
+  };
+
   const chatContextValue = {
     messages,
     setMessages,
@@ -269,7 +286,9 @@ export const ChatProvider = ({ children }) => {
     isChatInputFullScreen,
     setIsChatInputFullScreen,
     chatEndRef,
+    availableModels,
     selectedModel,
+    handleModelChange,
     scrollToBottom,
     fetchConversations,
     fetchMessages,

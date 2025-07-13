@@ -48,7 +48,6 @@ function App() {
             <div className="flex-1 flex flex-col overflow-hidden">
               <TopBar
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-                selectedModel="deepseek/deepseek-r1-0528-qwen3-8b"
               />
               <div className="flex-1 overflow-y-auto overscroll-y-contain">
                 <Routes>
