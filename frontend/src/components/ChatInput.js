@@ -96,9 +96,13 @@ const ChatInput = ({ sidebarOpen }) => {
               <button
                 type="submit"
                 disabled={!inputValue.trim()}
-                className="p-2 bg-purple-gradient hover:opacity-90 disabled:bg-border disabled:cursor-not-allowed rounded-xl transition-opacity"
+                className={`p-2 rounded-xl transition-all ${
+                  inputValue.trim()
+                    ? 'bg-purple-gradient hover:opacity-90'
+                    : 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
+                }`}
               >
-                <Send className="w-5 h-5 text-white" />
+                <Send className={`w-5 h-5 ${inputValue.trim() ? 'text-white' : 'text-gray-400 dark:text-gray-500'}`} />
               </button>
             )}
           </div>
