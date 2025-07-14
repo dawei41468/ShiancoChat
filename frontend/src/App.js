@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { AuthProvider, AuthContext } from './AuthContext';
 import { LanguageProvider } from './LanguageContext';
-import { ChatProvider } from './ChatContext'; // Import ChatProvider
+import { ChatProvider } from './ChatContext';
 import TutorialsPage from './pages/TutorialsPage';
 import FAQPage from './pages/FAQPage';
 import SettingsPage from './pages/SettingsPage';
 import ChatPage from './pages/ChatPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
   useEffect(() => {
     const faviconLink = document.getElementById('favicon');
     if (faviconLink) {
@@ -38,32 +39,51 @@ function App() {
 
   return (
     <Router>
-      <LanguageProvider>
-        <ChatProvider>
-          <div className="flex h-screen overflow-hidden font-medium bg-background text-text-primary">
-            <Sidebar
-              isOpen={sidebarOpen}
-              onToggle={() => setSidebarOpen(!sidebarOpen)}
-            />
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <TopBar
-                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-              />
-              <div className="flex-1 overflow-y-auto overscroll-y-contain">
-                <Routes>
-                  <Route path="/" element={<ChatPage sidebarOpen={sidebarOpen} />} />
-                  <Route path="/tutorials" element={<TutorialsPage />} />
-                  <Route path="/faq" element={<FAQPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </div>
-            </div>
-          </div>
-        </ChatProvider>
-      </LanguageProvider>
+      <AuthProvider>
+        <LanguageProvider>
+          <ChatProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/*" element={<ProtectedRoute />} />
+            </Routes>
+          </ChatProvider>
+        </LanguageProvider>
+      </AuthProvider>
     </Router>
   );
 }
+
+const ProtectedRoute = () => {
+  const { token } = useContext(AuthContext);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden font-medium bg-background text-text-primary">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        />
+        <div className="flex-1 overflow-y-auto overscroll-y-contain">
+          <Routes>
+            <Route path="/" element={<ChatPage sidebarOpen={sidebarOpen} />} />
+            <Route path="/tutorials" element={<TutorialsPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default App;

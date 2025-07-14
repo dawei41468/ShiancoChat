@@ -15,6 +15,7 @@
   --color-text-secondary: #CCCCCC;
   --color-border: #2A2A4A;
   --color-hover: #2A2A4A;
+  --color-input: #2A2A4A;
   --color-scrollbar-track: #1f2937;
   --color-scrollbar-thumb: #4b5563;
   --color-scrollbar-thumb-hover: #6b7280;
@@ -34,6 +35,7 @@
   --color-text-secondary: #666666;
   --color-border: #E0E0E0;
   --color-hover: #E0E0E0;
+  --color-input: #E8E8E8;
   --color-scrollbar-track: #F0F0F0;
   --color-scrollbar-thumb: #D0D0D0;
   --color-scrollbar-thumb-hover: #B0B0B0;
@@ -129,3 +131,5 @@ select:focus {
     overflow-x: auto;
     white-space: nowrap;
 }
+
+

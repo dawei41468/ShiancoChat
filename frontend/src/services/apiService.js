@@ -7,6 +7,14 @@ const apiClient = axios.create({
   baseURL: BACKEND_URL,
 });
 
+export const setAuthHeader = (token) => {
+  if (token) {
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete apiClient.defaults.headers.common['Authorization'];
+  }
+};
+
 export const fetchConversations = () => {
   return apiClient.get('/api/chat/conversations');
 };
@@ -44,4 +52,21 @@ export const saveMessage = (message) => {
 
 export const generateConversationTitle = (conversationId, model) => {
   return apiClient.post(`/api/chat/conversations/${conversationId}/generate-title`, { model });
+};
+
+export const login = (email, password) => {
+  const formData = new URLSearchParams();
+  formData.append('username', email);
+  formData.append('password', password);
+  return apiClient.post('/api/auth/login', formData, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+};
+
+export const register = (userData) => {
+  return apiClient.post('/api/auth/register', userData);
+};
+
+export const getCurrentUser = () => {
+  return apiClient.get('/api/auth/users/me');
 };
