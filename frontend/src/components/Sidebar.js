@@ -101,7 +101,7 @@ const Sidebar = ({ isOpen }) => {
           </button>
         </div>
   
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary">
               {t.navigation || "Navigation"}
@@ -125,11 +125,11 @@ const Sidebar = ({ isOpen }) => {
             </nav>
           </div>
   
-          <div className="p-4 border-t border-border">
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary">
+          <div className="flex-1 flex flex-col p-4 border-t border-border overflow-hidden">
+            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary flex-shrink-0">
               {t.recentConversations || "Recent Conversations"}
             </h3>
-            <div className="space-y-2">
+            <div className="flex-1 space-y-2 overflow-y-auto no-scrollbar">
               {conversations.map((conversation) => (
                 <div
                   key={conversation.id}
@@ -144,12 +144,11 @@ const Sidebar = ({ isOpen }) => {
                         navigate('/');
                       }
                     }}
-                    className="flex-1 flex items-start space-x-3 p-3 text-left"
+                    className="flex-1 flex items-start space-x-3 p-3 pr-10 text-left overflow-hidden"
                   >
-                    <ChatBubbleIcon className="w-5 h-5" stroke="currentColor" isDarkMode={theme === 'dark'} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate text-text-primary">
-                        {t.language === 'CN' ? conversation.title.substring(0, 10) + (conversation.title.length > 10 ? '...' : '') : conversation.title}
+                    <div className={`flex-1 min-w-0 no-scrollbar ${conversation.id === currentConversationId ? 'scroll-on-overflow' : 'group-hover:scroll-on-overflow'}`}>
+                      <p className={`text-sm font-medium text-text-primary ${conversation.id !== currentConversationId ? 'truncate' : ''}`}>
+                        {conversation.title}
                       </p>
                     </div>
                   </button>
