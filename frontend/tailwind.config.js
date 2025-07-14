@@ -14,6 +14,7 @@ module.exports = {
         'text-primary': 'var(--color-text-primary)',
         'text-secondary': 'var(--color-text-secondary)',
         border: 'var(--color-border)',
+        input: 'var(--color-input)',
         hover: 'var(--color-hover)',
         purple: {
           'gradient-start': 'var(--color-purple-gradient-start)',

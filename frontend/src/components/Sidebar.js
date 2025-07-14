@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Home, Book, Settings, HelpCircle, Plus, MoreVertical, Pencil, Trash
+  Home, Book, Settings, HelpCircle, Plus, MoreVertical, Pencil, Trash, LogOut
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useChat } from '../ChatContext';
 import { useTheme } from '../ThemeContext';
+import { AuthContext } from '../AuthContext';
 import ShiancoChatHeader from './ShiancoChatHeader';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
@@ -70,6 +71,61 @@ const ConversationActions = ({ conversationId, onRename, onDelete }) => {
     );
 };
 
+const ProfileDropdown = () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const { user, logout } = useContext(AuthContext);
+    const { t } = useLanguage();
+    const navigate = useNavigate();
+    const menuRef = useRef(null);
+  
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (menuRef.current && !menuRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
+  
+    return (
+      <div className="relative" ref={menuRef}>
+        <button onClick={() => setIsOpen(!isOpen)} className="flex items-center space-x-3 w-full">
+          <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
+            <ChatBubbleIcon className="w-6 h-6" stroke="#FFFFFF" />
+          </div>
+          <div className="flex-1 flex items-center space-x-4">
+            <p className="text-sm font-semibold mr-4 text-text-primary">{user ? user.name : t.userName}</p>
+          </div>
+        </button>
+        {isOpen && (
+          <div className="absolute bottom-full left-0 mb-2 w-48 bg-surface border border-border rounded-lg shadow-lg z-10">
+            <button
+              onClick={() => {
+                navigate('/settings');
+                setIsOpen(false);
+              }}
+              className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-text-primary hover:bg-hover rounded-t-lg"
+            >
+              <Settings className="w-4 h-4" />
+              <span>{t.settings || "Settings"}</span>
+            </button>
+            <hr className="border-border" />
+            <button
+              onClick={logout}
+              className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-hover rounded-b-lg"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{t.signOut || "Sign Out"}</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+};
+
 // Sidebar Component
 const Sidebar = ({ isOpen }) => {
     const { t } = useLanguage();
@@ -81,7 +137,6 @@ const Sidebar = ({ isOpen }) => {
     const sidebarItems = [
       { icon: Home, label: 'Home', path: '/' },
       { icon: Book, label: 'Tutorials', path: '/tutorials' },
-      { icon: Settings, label: 'Settings', path: '/settings' },
       { icon: HelpCircle, label: 'FAQ', path: '/faq' },
     ];
   
@@ -103,7 +158,7 @@ const Sidebar = ({ isOpen }) => {
   
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary">
+            <h3 className="text-sm font-semibold uppercase tracking-wider mb-3 text-text-secondary">
               {t.navigation || "Navigation"}
             </h3>
             <nav className="space-y-1">
@@ -126,7 +181,7 @@ const Sidebar = ({ isOpen }) => {
           </div>
   
           <div className="flex-1 flex flex-col p-4 border-t border-border overflow-hidden">
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-text-secondary flex-shrink-0">
+            <h3 className="text-sm font-semibold uppercase tracking-wider mb-3 text-text-secondary flex-shrink-0">
               {t.recentConversations || "Recent Conversations"}
             </h3>
             <div className="flex-1 space-y-2 overflow-y-auto no-scrollbar">
@@ -166,14 +221,7 @@ const Sidebar = ({ isOpen }) => {
         </div>
   
         <div className="p-4 border-t border-border">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
-              <ChatBubbleIcon className="w-6 h-6" stroke="#FFFFFF" />
-            </div>
-            <div className="flex-1 flex items-center space-x-4">
-              <p className="text-sm font-semibold mr-4 text-text-primary">{t.userName}</p>
-            </div>
-          </div>
+          <ProfileDropdown />
         </div>
       </div>
     );

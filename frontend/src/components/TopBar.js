@@ -1,7 +1,7 @@
 import React from 'react';
+import { Menu } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
-import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { t } = useLanguage();
@@ -12,10 +12,10 @@ const TopBar = ({ onToggleSidebar }) => {
       <div className="flex items-center space-x-4">
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-full bg-purple-gradient hover:opacity-90 transition-colors pointer-events-auto z-50"
+          className="p-2 rounded-md bg-purple-gradient hover:opacity-90 transition-colors pointer-events-auto z-50"
           aria-label={t.toggleSidebar || "Toggle Sidebar"}
         >
-          <ChatBubbleIcon className="w-6 h-6" stroke="#FFFFFF" />
+          <Menu className="w-4 h-4 text-white" />
         </button>
         
         <div className="flex items-center space-x-2 px-3 py-2 rounded-lg bg-surface">

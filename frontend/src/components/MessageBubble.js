@@ -13,7 +13,7 @@ const MessageBubble = ({ message, isThinking = false }) => {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className={`flex max-w-3xl ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
           isUser ? 'bg-user-bubble-background text-user-bubble-text ml-3' : 'bg-surface text-text-primary mr-3'
         }`}>
           {isUser ? (

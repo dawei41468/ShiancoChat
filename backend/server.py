@@ -21,7 +21,7 @@ load_dotenv(ROOT_DIR / 'backend' / '.env')
 
 from backend.database import db, close_mongo_connection
 from backend.models import Conversation, ConversationCreate, Message, UpdateConversationTitleRequest, TitleGenerationRequest
-from routers import chat, ollama, openai
+from routers import chat, ollama, openai, auth
 
 # Get port from environment variable, default to 8000 if not set
 PORT = int(os.environ.get("PORT", 8000))
@@ -133,6 +133,7 @@ app.include_router(api_router)
 app.include_router(ollama.router, prefix="/api/ollama")
 app.include_router(openai.router, prefix="/api/openai")
 app.include_router(chat.router, prefix="/api/chat")
+app.include_router(auth.router, prefix="/api/auth")
 
 app.add_middleware(
     CORSMiddleware,
