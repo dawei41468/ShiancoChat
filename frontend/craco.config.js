@@ -26,7 +26,7 @@ module.exports = {
           ignored: /.*/, // Ignore all files
         };
       }
-      
+
       return webpackConfig;
     },
   },

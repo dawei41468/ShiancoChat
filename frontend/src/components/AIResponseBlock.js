@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ChevronDown, Copy, Check } from 'lucide-react';
+import { ChevronDown, Copy, Check, Clock } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useTheme } from '@/ThemeContext';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
@@ -39,7 +39,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
       </SyntaxHighlighter>
     </div>
   ) : (
-    <code className="px-1 py-0.5 rounded font-semibold bg-hover text-purple-400" {...props}>
+    <code {...props}>
       {children}
     </code>
   );
@@ -47,17 +47,34 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
 
 const AIResponseBlock = ({ response }) => {
   const { theme } = useTheme();
-  const { thinking, answer, isThinkingComplete } = response;
+  const { thinking, answer, isThinkingComplete, thinkingStartTime, thinkingDuration } = response;
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
+  const [liveDuration, setLiveDuration] = useState(0);
   const { t } = useLanguage();
+  const animationFrameRef = useRef();
 
   useEffect(() => {
     if (thinking && !isThinkingComplete) {
       setIsThinkingOpen(true); // Automatically open when thinking starts
+      
+      const animate = () => {
+        setLiveDuration((Date.now() - thinkingStartTime) / 1000);
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
+      animationFrameRef.current = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
     } else if (isThinkingComplete) {
       setIsThinkingOpen(false); // Auto collapse when thinking is complete
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     }
-  }, [thinking, isThinkingComplete]);
+  }, [thinking, isThinkingComplete, thinkingStartTime]);
 
   return (
     <div className="flex justify-start mb-4 group">
@@ -73,7 +90,19 @@ const AIResponseBlock = ({ response }) => {
                   <h3 className="text-sm font-semibold text-text-primary">
                     {isThinkingComplete ? t.thinkingComplete || 'Thinking Complete' : t.thinking || 'Thinking...'}
                   </h3>
-                  <ChevronDown className={`w-5 h-5 transition-transform text-text-primary ${isThinkingOpen ? 'rotate-0' : '-rotate-90'}`} />
+                  <div className="flex items-center space-x-2">
+                    <span className="flex items-center space-x-1 text-xs text-text-secondary">
+                      {isThinkingComplete ? (
+                        <span>Took {Math.floor(thinkingDuration || 0)}s</span>
+                      ) : (
+                        <>
+                          <Clock size={14} />
+                          <span>{Math.floor(liveDuration)}s</span>
+                        </>
+                      )}
+                    </span>
+                    <ChevronDown className={`w-5 h-5 transition-transform text-text-primary ${isThinkingOpen ? 'rotate-0' : '-rotate-90'}`} />
+                  </div>
                 </div>
                 <div className={`overflow-y-auto transition-all duration-300 ease-in-out ${isThinkingOpen ? 'max-h-72 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words pl-5 italic text-text-secondary">
@@ -88,17 +117,10 @@ const AIResponseBlock = ({ response }) => {
             <div className={`prose prose-sm max-w-none ${theme === 'dark' ? 'prose-invert' : ''}`}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                components={{
-                  code: (props) => <CodeBlock {...props} />,
-                  p: ({node, ...props}) => <p className="mb-4" {...props} />,
-                  h1: ({node, ...props}) => <h1 className="text-2xl font-bold mt-6 mb-3" {...props} />,
-                  h2: ({node, ...props}) => <h2 className="text-xl font-bold mt-5 mb-3" {...props} />,
-                  h3: ({node, ...props}) => <h3 className="text-lg font-bold mt-4 mb-2" {...props} />,
-                  ul: ({node, ...props}) => <ul className="list-disc pl-6 mb-4" {...props} />,
-                  ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-4" {...props} />,
-                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                }}
-              >{answer}</ReactMarkdown>
+                components={{ code: CodeBlock }}
+              >
+                {answer}
+              </ReactMarkdown>
             </div>
           )}
         </div>

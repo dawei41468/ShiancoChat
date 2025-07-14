@@ -3,6 +3,38 @@ import * as apiService from '@/services/apiService';
 
 const ChatContext = createContext();
 
+// Helper function to process raw assistant messages into a displayable format
+const _processAssistantMessage = (msg) => {
+  let thinkingContent = '';
+  let answerContent = '';
+
+  if (msg.sender === 'assistant' && msg.text) {
+    const thinkMatch = msg.text.match(/<think>((?:.|\n)*?)<\/think>/);
+    const answerMatch = msg.text.match(/<answer>((?:.|\n)*?)<\/answer>/);
+
+    thinkingContent = thinkMatch ? thinkMatch[1] : '';
+    
+    if (answerMatch) {
+      answerContent = answerMatch[1];
+    } else {
+      // If no explicit answer tag, assume all non-thinking text is the answer
+      answerContent = msg.text.replace(/<think>.*<\/think>/s, '').trim();
+    }
+  } else {
+    answerContent = msg.text;
+  }
+
+  return {
+    ...msg,
+    timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    thinking: thinkingContent,
+    answer: answerContent,
+    isThinkingComplete: true,
+    thinkingDuration: msg.thinking_duration || 0,
+  };
+};
+
+
 export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -31,30 +63,12 @@ export const ChatProvider = ({ children }) => {
     }
     try {
       const response = await apiService.fetchMessagesForConversation(conversationId);
-      setMessages(response.data.map(msg => {
-        let thinkingContent = '';
-        let answerContent = msg.text;
-        let isThinkingComplete = true; // Assume complete unless parsing indicates otherwise
-
-        if (msg.sender === 'assistant') {
-          const thinkingMatch = msg.text.match(/<think>(.*?)<\/think>/s);
-          if (thinkingMatch && thinkingMatch[1]) {
-            thinkingContent = thinkingMatch[1].trim();
-            answerContent = msg.text.replace(/<think>.*?<\/think>/s, '').trim();
-          } else {
-            // If no thinking block, the whole text is the answer
-            answerContent = msg.text;
-            thinkingContent = '';
-          }
-        }
-
-        return {
+      setMessages(response.data.map(msg => 
+        msg.sender === 'assistant' ? _processAssistantMessage(msg) : {
           ...msg,
           timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          rawText: msg.text, // Store raw text for debugging
-          ...(msg.sender === 'assistant' ? { thinking: thinkingContent, answer: answerContent, isThinkingComplete: isThinkingComplete } : {})
-        };
-      }));
+        }
+      ));
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
@@ -77,7 +91,7 @@ export const ChatProvider = ({ children }) => {
     try {
       const response = await apiService.createNewChat("New Chat");
       const newConversation = response.data;
-      await fetchConversations(); // Refetch the list to ensure it's sorted correctly
+      await fetchConversations();
       setCurrentConversationId(newConversation.id);
       setMessages([]);
     } catch (error) {
@@ -89,7 +103,6 @@ export const ChatProvider = ({ children }) => {
     try {
       const response = await apiService.fetchAvailableModels();
       setAvailableModels(response.data.models);
-      // Set the first model as the default selected one
       if (response.data.models.length > 0) {
         setSelectedModel(response.data.models[0]);
       }
@@ -103,11 +116,8 @@ export const ChatProvider = ({ children }) => {
       await fetchAvailableModels();
       const convos = await fetchConversations();
       if (convos.length > 0) {
-        // Set currentConversationId only if it's not already set.
-        // This prevents resetting the view on hot-reloads.
         setCurrentConversationId(currentId => currentId || convos[0].id);
       } else {
-        // If there are no conversations, create a new one.
         await handleNewChat();
       }
     };
@@ -119,17 +129,26 @@ export const ChatProvider = ({ children }) => {
   }, [currentConversationId, fetchMessages]);
 
   const handleSendMessage = async (text) => {
-    if (!text || !text.trim() || !currentConversationId) return;
+    if (!text || !text.trim() || !currentConversationId || !selectedModel) return;
 
-    const userMessage = {
-      id: Date.now().toString(),
+    // --- 1. Save User Message ---
+    const userMessagePayload = {
       conversation_id: currentConversationId,
       sender: 'user',
       text: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toISOString(),
     };
+    const savedUserMessageResponse = await apiService.saveMessage(userMessagePayload);
+    const savedUserMessage = {
+        ...savedUserMessageResponse.data,
+        timestamp: new Date(savedUserMessageResponse.data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages(prev => [...prev, savedUserMessage]);
+    setInputValue('');
+    setIsTyping(true);
 
-    const aiResponseId = Date.now().toString() + '-ai';
+    // --- 2. Prepare for AI Response ---
+    const aiResponseId = Date.now().toString();
     const aiResponsePlaceholder = {
       id: aiResponseId,
       conversation_id: currentConversationId,
@@ -137,68 +156,92 @@ export const ChatProvider = ({ children }) => {
       thinking: '',
       answer: '',
       isThinkingComplete: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      thinkingStartTime: Date.now(),
+      thinkingDuration: 0,
+      timestamp: new Date().toISOString() // Use ISO for consistency, format on display
     };
+    setMessages(prev => [...prev, aiResponsePlaceholder]);
 
-    setMessages(prev => [...prev, userMessage, aiResponsePlaceholder]);
-    setInputValue('');
-    setIsTyping(true);
-
-    // Create and store a new AbortController for this request
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const currentAIResponseMutable = { ...aiResponsePlaceholder };
-    const payload = {
+    const streamPayload = {
       conversation_id: currentConversationId,
-      sender: 'user',
       text: text,
       model: selectedModel,
     };
 
-    const updateAIResponse = (updates) => {
-      setMessages(prevMessages => {
-        const newMessages = [...prevMessages];
-        const index = newMessages.findIndex(msg => msg.id === aiResponseId);
-        if (index !== -1) {
-          newMessages[index] = { ...newMessages[index], ...updates };
-        }
-        return newMessages;
-      });
+    const updateAIResponse = (updater) => {
+      setMessages(prev =>
+        prev.map(msg => (msg.id === aiResponseId ? updater(msg) : msg))
+      );
     };
 
-    await apiService.streamChatResponse(payload, {
-      signal: abortControllerRef.current.signal,
-      onData: (data) => {
-        updateAIResponse({
-          thinking: data.thinking.trim(),
-          answer: data.answer.trim(),
-        });
-      },
-      onComplete: (finalData) => {
-        abortControllerRef.current = null;
+    // --- 3. Stream and Process AI Response ---
+    try {
+      const finalMessageState = { ...aiResponsePlaceholder };
+      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal });
+
+      for await (const event of iterator) {
+        switch (event.event) {
+          case 'thread.run.step.in_progress':
+            finalMessageState.thinking += event.data.details;
+            updateAIResponse(msg => ({ ...msg, thinking: finalMessageState.thinking }));
+            break;
+          case 'thread.message.delta':
+            if (finalMessageState.thinking && !finalMessageState.isThinkingComplete) {
+              finalMessageState.isThinkingComplete = true;
+              finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
+            }
+            finalMessageState.answer += event.data.content;
+            updateAIResponse(msg => ({ ...msg, answer: finalMessageState.answer, isThinkingComplete: finalMessageState.isThinkingComplete, thinkingDuration: finalMessageState.thinkingDuration }));
+            break;
+          case 'thread.run.completed':
+            if (!finalMessageState.isThinkingComplete) {
+              finalMessageState.isThinkingComplete = true;
+              finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
+            }
+            
+            // --- 4. Save Final AI Message ---
+            const messageToSave = {
+              conversation_id: finalMessageState.conversation_id,
+              sender: 'assistant',
+              text: `<think>${finalMessageState.thinking}</think><answer>${finalMessageState.answer}</answer>`,
+              thinking_duration: finalMessageState.thinkingDuration,
+              timestamp: new Date().toISOString(),
+            };
+
+            const savedAssistantMessage = await apiService.saveMessage(messageToSave);
+            
+            const processedMessage = _processAssistantMessage(savedAssistantMessage.data);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? processedMessage : m));
+
+            // If the conversation title is still "New Chat", generate a new one.
+            const currentConversation = conversations.find(c => c.id === currentConversationId);
+            if (currentConversation && currentConversation.title === "New Chat") {
+              apiService.generateConversationTitle(currentConversationId, selectedModel)
+                .then(() => {
+                  // Refresh the conversation list to show the new title
+                  fetchConversations();
+                })
+                .catch(err => console.error("Error generating title:", err));
+            }
+            break;
+        }
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Error during streaming:', error);
+        updateAIResponse(msg => ({
+            ...msg,
+            answer: 'Error: Could not get a response. Please try again.',
+            isThinkingComplete: true,
+        }));
+      }
+    } finally {
         setIsTyping(false);
-        const finalAnswer = finalData.answer
-          .replace(/###\s*/g, '\n\n### ')
-          .replace(/\|\|\s*/g, '\n\n');
-        
-        updateAIResponse({ 
-            answer: finalAnswer.trim(),
-            thinking: finalData.thinking.trim(),
-            isThinkingComplete: true 
-        });
-        // fetchConversations(); // Re-enable if you want to refresh conversations list after each message
-      },
-      onError: (error) => {
         abortControllerRef.current = null;
-        console.error('Error during streaming response:', error);
-        setIsTyping(false);
-        updateAIResponse({
-          answer: 'Error: Could not get a response. Please try again.',
-          isThinkingComplete: true,
-        });
-      },
-    });
+    }
   };
 
   const handlePromptClick = (prompt) => {
@@ -210,7 +253,6 @@ export const ChatProvider = ({ children }) => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsTyping(false);
-      // Update the last message to indicate it was stopped
       setMessages(prev => {
         const newMessages = [...prev];
         const lastMessageIndex = newMessages.length - 1;
@@ -226,6 +268,7 @@ export const ChatProvider = ({ children }) => {
       });
     }
   }, []);
+  
   const handleSelectConversation = (conversationId) => {
     setCurrentConversationId(conversationId);
     setMessages([]);
@@ -252,10 +295,8 @@ export const ChatProvider = ({ children }) => {
 
         if (currentConversationId === conversationId) {
           if (remainingConversations.length > 0) {
-            // If other conversations exist, switch to the first one
             setCurrentConversationId(remainingConversations[0].id);
           } else {
-            // If no conversations are left, create a new one
             await handleNewChat();
           }
         }
