@@ -19,7 +19,7 @@ from starlette.middleware.cors import CORSMiddleware
 load_dotenv(ROOT_DIR / 'backend' / '.env')
 
 from backend.database import close_mongo_connection
-from routers import chat, ollama, openai, auth
+from routers import chat, ollama, openai, auth, users
 
 # Get port from environment variable, default to 8000 if not set
 PORT = int(os.environ.get("PORT", 8000))
@@ -54,6 +54,7 @@ app.include_router(ollama.router, prefix="/api/ollama")
 app.include_router(openai.router, prefix="/api/openai")
 app.include_router(chat.router, prefix="/api/chat")
 app.include_router(auth.router, prefix="/api/auth")
+app.include_router(users.router, prefix="/api/users")
 
 app.add_middleware(
     CORSMiddleware,

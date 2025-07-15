@@ -71,7 +71,6 @@ pytest==8.3.5
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
 python-engineio==4.12.2
-python-jose==3.3.0
 python-jose==3.5.0
 python-multipart==0.0.20
 python-socketio==5.13.0
@@ -104,3 +103,5 @@ watchfiles==1.1.0
 websockets==15.0.1
 wsproto==1.2.0
 yarl==1.20.1
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9

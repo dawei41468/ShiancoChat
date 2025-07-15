@@ -78,3 +78,15 @@ export const updateUser = (userData) => {
 export const deleteAccount = () => {
   return apiClient.delete('/api/auth/users/me');
 };
+
+export const fetchUsers = () => {
+  return apiClient.get('/api/users');
+};
+
+export const updateUserRole = (userId, newRole) => {
+  return apiClient.patch(`/api/users/${userId}/role`, { role: newRole });
+};
+
+export const deleteUser = (userId) => {
+  return apiClient.delete(`/api/users/${userId}`);
+};
