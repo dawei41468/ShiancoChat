@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Home, Book, Settings, HelpCircle, Plus, MoreVertical, Pencil, Trash, LogOut
+  Home, Book, Settings, HelpCircle, Plus, MoreVertical, Pencil, Trash, LogOut, User
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 import { useChat } from '../ChatContext';
@@ -112,6 +112,18 @@ const ProfileDropdown = () => {
               <Settings className="w-4 h-4" />
               <span>{t.settings || "Settings"}</span>
             </button>
+            {user && user.role === 'Admin' && (
+              <button
+                onClick={() => {
+                  navigate('/admin');
+                  setIsOpen(false);
+                }}
+                className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-text-primary hover:bg-hover"
+              >
+                <User className="w-4 h-4" />
+                <span>{t.adminPanel || "Admin Panel"}</span>
+              </button>
+            )}
             <hr className="border-border" />
             <button
               onClick={logout}
