@@ -4,11 +4,13 @@ import { AuthContext } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { updateUser, deleteAccount } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from './ToastNotification';
 
 export default function ProfileSettings() {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const [userName, setUserName] = useState('');
   const { user, setUser, logout } = useContext(AuthContext);
@@ -30,10 +32,10 @@ export default function ProfileSettings() {
     try {
       const response = await updateUser({ name: userName });
       setUser(response.data); // Update user in AuthContext
-      alert('User name updated successfully!');
+      showToast(t.userNameUpdatedSuccessfully || 'User name updated successfully!', 'success');
     } catch (error) {
       console.error('Failed to update user name:', error);
-      alert('Failed to update user name. Please try again.');
+      showToast(t.failedToUpdateUserName || 'Failed to update user name. Please try again.', 'error');
     }
   };
 
@@ -42,11 +44,11 @@ export default function ProfileSettings() {
       try {
         await deleteAccount();
         logout(); // Clear user session
-        alert(t.accountDeletedSuccessfully || 'Account deleted successfully!');
+        showToast(t.accountDeletedSuccessfully || 'Account deleted successfully!', 'success');
         navigate('/login'); // Redirect to login page
       } catch (error) {
         console.error('Failed to delete account:', error);
-        alert(t.failedToDeleteAccount || 'Failed to delete account. Please try again.');
+        showToast(t.failedToDeleteAccount || 'Failed to delete account. Please try again.', 'error');
       }
     }
   };
