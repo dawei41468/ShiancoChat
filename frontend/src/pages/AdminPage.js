@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext'; // Import useAuth
 
 export default function AdminPage() {
   const { t } = useLanguage();
-  const { user } = useAuth(); // Get user from AuthContext
+  const { user: loggedInUser } = useAuth(); // Get loggedInUser from AuthContext
   const [activeTab, setActiveTab] = useState('user-management');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,10 +46,10 @@ export default function AdminPage() {
       }
     };
 
-    if (activeTab === 'user-management' && user) { // Only fetch if user is authenticated
+    if (activeTab === 'user-management' && loggedInUser) { // Only fetch if user is authenticated
       getUsers();
     }
-  }, [activeTab, user]); // Add user to dependency array
+  }, [activeTab, loggedInUser]); // Add loggedInUser to dependency array
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
@@ -169,10 +169,11 @@ export default function AdminPage() {
                             <select
                               className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 align-middle" /* Added align-middle */
                               value={user.role}
-                              onChange={(e) => handleRoleChange(user.id, e.target.value)} // Call new handler
+                              onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                              disabled={loggedInUser && loggedInUser.id === user.id}
                             >
                               <option value="User">User</option>
-                              <option value="Admin">Admin</option> {/* Removed className from option */}
+                              <option value="Admin">Admin</option>
                             </select>
                           </div>
                         </td>

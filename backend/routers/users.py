@@ -35,10 +35,10 @@ async def update_user_role(
         )
     
     # Ensure an admin cannot change their own role or demote themselves
-    if current_user.id == user_id and role_update.role != UserRole.ADMIN:
+    if current_user.id == user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admins cannot change their own role to non-admin"
+            detail="Admins cannot change their own role"
         )
 
     user_doc = await db.users.find_one({"id": user_id})
