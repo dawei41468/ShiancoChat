@@ -6,6 +6,7 @@ import { ChatProvider } from './ChatContext';
 import TutorialsPage from './pages/TutorialsPage';
 import FAQPage from './pages/FAQPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminPage from './pages/AdminPage';
 import ChatPage from './pages/ChatPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -78,6 +79,7 @@ const ProtectedRoute = () => {
             <Route path="/tutorials" element={<TutorialsPage />} />
             <Route path="/faq" element={<FAQPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
