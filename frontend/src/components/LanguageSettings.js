@@ -15,11 +15,11 @@ export default function LanguageSettings() {
   };
 
   return (
-    <section className="mb-10 p-6 rounded-lg border border-border bg-surface">
+    <section className="mb-5 p-6 rounded-lg border border-border bg-surface">
       <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.language || "Language"}</h2>
       <div className="flex space-x-4">
         <button
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+          className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
             selectedLanguage === 'EN'
               ? 'bg-purple-gradient text-white'
               : 'bg-hover text-text-primary'
@@ -29,7 +29,7 @@ export default function LanguageSettings() {
           {t.english || "English"}
         </button>
         <button
-          className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+          className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
             selectedLanguage === 'CN'
               ? 'bg-purple-gradient text-white'
               : 'bg-hover text-text-primary'

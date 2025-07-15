@@ -32,6 +32,9 @@ class UserCreate(BaseModel):
    password: str
    department: Department
 
+class UserUpdate(BaseModel):
+   name: Optional[str] = None
+
 class Token(BaseModel):
    access_token: str
    token_type: str
@@ -49,6 +52,7 @@ class Message(BaseModel):
 
 class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_email: str # Link to the user who owns this conversation
     title: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_updated: datetime = Field(default_factory=datetime.utcnow)

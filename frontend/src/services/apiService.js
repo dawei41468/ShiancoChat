@@ -70,3 +70,11 @@ export const register = (userData) => {
 export const getCurrentUser = () => {
   return apiClient.get('/api/auth/users/me');
 };
+
+export const updateUser = (userData) => {
+  return apiClient.patch('/api/auth/users/me', userData);
+};
+
+export const deleteAccount = () => {
+  return apiClient.delete('/api/auth/users/me');
+};

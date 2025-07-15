@@ -109,6 +109,12 @@ const translations = {
     english: "英语",
     chinese: "中文",
     currentLanguage: "当前语言:",
+    userProfile: "用户资料",
+    userEmail: "用户邮箱",
+    editName: "编辑名称",
+    save: "保存",
+    currentUserNamePlaceholder: "当前用户名",
+    deleteAccount: "删除账户",
   }
 };
 

@@ -21,5 +21,20 @@ db = client[db_name]
 async def get_db():
     return db
 
+async def delete_user(user_email: str):
+    # Find all conversations belonging to the user
+    user_conversations = db.conversations.find({"user_email": user_email})
+    conversation_ids = [conv["_id"] async for conv in user_conversations]
+
+    # Delete all messages associated with these conversations
+    if conversation_ids:
+        await db.messages.delete_many({"conversation_id": {"$in": conversation_ids}})
+
+    # Delete all conversations belonging to the user
+    await db.conversations.delete_many({"user_email": user_email})
+
+    # Delete the user document
+    await db.users.delete_one({"email": user_email})
+
 def close_mongo_connection():
     client.close()
