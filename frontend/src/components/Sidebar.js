@@ -96,8 +96,11 @@ const ProfileDropdown = () => {
           <div className="w-10 h-10 bg-purple-gradient rounded-full flex items-center justify-center flex-shrink-0">
             <ChatBubbleIcon className="w-6 h-6" stroke="#FFFFFF" />
           </div>
-          <div className="flex-1 flex items-center space-x-4">
-            <p className="text-sm font-semibold mr-4 text-text-primary">{user ? user.name : t.userName}</p>
+          <div className="flex-1 flex flex-col items-start">
+            <p className="text-base font-semibold text-text-primary">{user ? user.name : t.userName}</p>
+            {user && user.role === 'Admin' && (
+              <p className="italic text-xs bg-purple-gradient text-transparent bg-clip-text">Admin</p>
+            )}
           </div>
         </button>
         {isOpen && (
