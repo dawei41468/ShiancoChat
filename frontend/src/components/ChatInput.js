@@ -140,7 +140,7 @@ const ChatInput = ({ sidebarOpen }) => {
                     className="p-2 rounded-xl transition-colors bg-red-600 hover:bg-red-700"
                     aria-label="Stop generating"
                   >
-                    <Square className="w-5 h-5 text-white" />
+                    <Square className="w-4 h-4 text-white" />
                   </button>
                 ) : (
                   <button
@@ -152,7 +152,7 @@ const ChatInput = ({ sidebarOpen }) => {
                         : 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'
                     }`}
                   >
-                    <Send className={`w-5 h-5 ${inputValue.trim() ? 'text-white' : 'text-gray-400 dark:text-gray-500'}`} />
+                    <Send className={`w-4 h-4 ${inputValue.trim() ? 'text-white' : 'text-gray-400 dark:text-gray-500'}`} />
                   </button>
                 )}
               </div>

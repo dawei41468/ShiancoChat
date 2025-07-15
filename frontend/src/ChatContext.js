@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import * as apiService from '@/services/apiService';
+import { AuthContext } from './AuthContext'; // Import AuthContext
 
 const ChatContext = createContext();
 
@@ -36,6 +37,7 @@ const _processAssistantMessage = (msg) => {
 
 
 export const ChatProvider = ({ children }) => {
+  const { user } = useContext(AuthContext); // Get user from AuthContext
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -63,7 +65,7 @@ export const ChatProvider = ({ children }) => {
     }
     try {
       const response = await apiService.fetchMessagesForConversation(conversationId);
-      setMessages(response.data.map(msg => 
+      setMessages(response.data.map(msg =>
         msg.sender === 'assistant' ? _processAssistantMessage(msg) : {
           ...msg,
           timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -76,6 +78,10 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   const fetchConversations = useCallback(async () => {
+    if (!user) { // Only fetch conversations if a user is logged in
+      setConversations([]);
+      return [];
+    }
     try {
       const response = await apiService.fetchConversations();
       setConversations(response.data);
@@ -85,9 +91,10 @@ export const ChatProvider = ({ children }) => {
       setConversations([]);
       return [];
     }
-  }, []);
+  }, [user]); // Add user to dependency array
 
   const handleNewChat = useCallback(async () => {
+    if (!user) return; // Prevent creating new chat if no user
     try {
       const response = await apiService.createNewChat("New Chat");
       const newConversation = response.data;
@@ -97,7 +104,7 @@ export const ChatProvider = ({ children }) => {
     } catch (error) {
       console.error('Error creating new chat:', error);
     }
-  }, [fetchConversations]);
+  }, [fetchConversations, user]); // Add user to dependency array
 
   const fetchAvailableModels = useCallback(async () => {
     try {
@@ -113,23 +120,30 @@ export const ChatProvider = ({ children }) => {
 
   useEffect(() => {
     const initialize = async () => {
-      await fetchAvailableModels();
-      const convos = await fetchConversations();
-      if (convos.length > 0) {
-        setCurrentConversationId(currentId => currentId || convos[0].id);
+      if (user) { // Initialize only if user is logged in
+        await fetchAvailableModels();
+        const convos = await fetchConversations();
+        if (convos.length > 0) {
+          setCurrentConversationId(currentId => currentId || convos[0].id);
+        } else {
+          await handleNewChat();
+        }
       } else {
-        await handleNewChat();
+        // Clear chat state if no user is logged in
+        setConversations([]);
+        setMessages([]);
+        setCurrentConversationId(null);
       }
     };
     initialize();
-  }, [fetchConversations, handleNewChat, fetchAvailableModels]);
+  }, [fetchConversations, handleNewChat, fetchAvailableModels, user]); // Add user to dependency array
 
   useEffect(() => {
     fetchMessages(currentConversationId);
   }, [currentConversationId, fetchMessages]);
 
   const handleSendMessage = async (text) => {
-    if (!text || !text.trim() || !currentConversationId || !selectedModel) return;
+    if (!text || !text.trim() || !currentConversationId || !selectedModel || !user) return; // Prevent sending message if no user
 
     // --- 1. Save User Message ---
     const userMessagePayload = {

@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from backend import auth
-from backend.database import db
-from backend.models import User, UserCreate, Token
+from backend.database import db, delete_user
+
+from backend.models import User, UserCreate, Token, UserUpdate
 
 router = APIRouter()
 
@@ -47,3 +48,27 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @router.get("/users/me", response_model=User)
 async def read_users_me(current_user: User = Depends(auth.get_current_user)):
    return current_user
+
+@router.patch("/users/me", response_model=User)
+async def update_user_me(user_update: UserUpdate, current_user: User = Depends(auth.get_current_user)):
+    # Convert current_user to a dictionary, update fields, then convert back to User model
+    user_data = current_user.dict()
+    update_data = user_update.dict(exclude_unset=True)
+
+    for field, value in update_data.items():
+        user_data[field] = value
+    
+    updated_user = User(**user_data)
+    
+    # Update the user in the database
+    await db.users.update_one(
+        {"email": current_user.email},
+        {"$set": updated_user.dict(by_alias=True, exclude_unset=True)}
+    )
+    
+    return updated_user
+
+@router.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_me(current_user: User = Depends(auth.get_current_user)):
+    await delete_user(current_user.email)
+    return {"message": "Account deleted successfully"}
