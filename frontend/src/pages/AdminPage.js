@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../components/ToastNotification';
 import { useLanguage } from '../LanguageContext';
 import { fetchUsers, updateUserRole, deleteUser } from '../services/apiService'; // Import new functions
 import { useAuth } from '../AuthContext'; // Import useAuth
@@ -6,6 +7,7 @@ import { useAuth } from '../AuthContext'; // Import useAuth
 export default function AdminPage() {
   const { t } = useLanguage();
   const { user: loggedInUser } = useAuth(); // Get loggedInUser from AuthContext
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('user-management');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,25 +63,23 @@ export default function AdminPage() {
       setUsers(prevUsers =>
         prevUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
       );
-      alert(`User role updated to ${newRole}`);
+      showToast(`User role updated to ${newRole}`, 'success');
     } catch (err) {
       setError(err);
       console.error("Failed to update user role:", err);
-      alert(`Failed to update user role: ${err.message}`);
+      showToast(`Failed to update user role: ${err.message}`, 'error');
     }
   };
 
   const handleDeleteUser = async (userId, username) => {
-    if (window.confirm(`Are you sure you want to delete user ${username}?`)) {
-      try {
-        await deleteUser(userId);
-        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-        alert(`User ${username} deleted successfully.`);
-      } catch (err) {
-        setError(err);
-        console.error("Failed to delete user:", err);
-        alert(`Failed to delete user: ${err.message}`);
-      }
+    try {
+      await deleteUser(userId);
+      setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+      showToast(`User ${username} deleted successfully.`, 'success');
+    } catch (err) {
+      setError(err);
+      console.error("Failed to delete user:", err);
+      showToast(`Failed to delete user: ${err.message}`, 'error');
     }
   };
 
@@ -158,16 +158,13 @@ export default function AdminPage() {
                     </tr>
                   ) : (
                     users.map((user) => (
-                      <tr key={user.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                        <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                      <tr key={user.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700"><td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
                           <div>{user.name}</div>
                           <div className="text-gray-500 text-xs">{user.email}</div>
-                        </td>
-                        <td className="px-6 py-2 text-xs">{user.id}</td> {/* Shrink user ID and row height */}
-                        <td className="px-6 py-2"> {/* Shrink row height */}
-                          <div className="flex items-center space-x-2"> {/* Use flex to align select and button */}
+                        </td><td className="px-6 py-2 text-xs">{user.id}</td><td className="px-6 py-2">
+                          <div className="flex items-center space-x-2">
                             <select
-                              className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 align-middle" /* Added align-middle */
+                              className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500 align-middle"
                               value={user.role}
                               onChange={(e) => handleRoleChange(user.id, e.target.value)}
                               disabled={loggedInUser && loggedInUser.id === user.id}
@@ -176,16 +173,14 @@ export default function AdminPage() {
                               <option value="Admin">Admin</option>
                             </select>
                           </div>
-                        </td>
-                        <td className="px-6 py-2"> {/* Shrink row height */}
+                        </td><td className="px-6 py-2">
                           <button
-                            className="font-medium text-red-600 dark:text-red-500" // Removed hover:underline
-                            onClick={() => handleDeleteUser(user.id, user.name)} // Call new handler
+                            className="font-medium text-red-600 dark:text-red-500"
+                            onClick={() => handleDeleteUser(user.id, user.name)}
                           >
                             Delete
                           </button>
-                        </td>
-                      </tr>
+                        </td></tr>
                     ))
                   )}
                 </tbody>
