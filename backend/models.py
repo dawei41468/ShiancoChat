@@ -35,6 +35,9 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
    name: Optional[str] = None
 
+class UserRoleUpdate(BaseModel):
+   role: UserRole
+
 class Token(BaseModel):
    access_token: str
    token_type: str
