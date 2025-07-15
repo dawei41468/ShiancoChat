@@ -85,15 +85,48 @@ const AIResponseBlock = ({ response }) => {
         <div className="flex-1 min-w-0">
           {thinking && (
             <div className="mb-2">
-              <div className="p-4 rounded-lg shadow-md max-w-full bg-surface border border-border">
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsThinkingOpen(!isThinkingOpen)}>
-                  <h3 className="text-sm font-semibold text-text-primary">
-                    {isThinkingComplete ? t.thinkingComplete || 'Thinking Complete' : t.thinking || 'Thinking...'}
+              <div className="flex flex-col">
+                <div className="flex items-center cursor-pointer space-x-2" onClick={() => setIsThinkingOpen(!isThinkingOpen)}>
+                  <h3 className="text-sm font-semibold flex items-center">
+                    {!isThinkingComplete && (
+                      <svg
+                        aria-hidden="true"
+                        className="w-4 h-4 mr-2"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <style>
+                          {`
+                            .spinner_ajPY {
+                              transform-origin: center;
+                              animation: spinner_AtaB 0.75s infinite linear;
+                            }
+                            @keyframes spinner_AtaB {
+                              100% {
+                                transform: rotate(360deg);
+                              }
+                            }
+                          `}
+                        </style>
+                        <path
+                          d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z"
+                          opacity=".25"
+                        />
+                        <path
+                          d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.7a8,8,0,0,1,6.66-6.61A1.42,1.42,0,0,0,12,2.69h0A1.57,1.57,0,0,0,10.14,1.16Z"
+                          className="spinner_ajPY"
+                        />
+                      </svg>
+                    )}
+                    <span className={!isThinkingComplete ? "animated-gradient-text" : ""}>
+                      {isThinkingComplete ? t.thoughtForSeconds || `Thought for ${Math.floor(thinkingDuration || 0)} seconds` : t.thinking || 'Thinking...'}
+                    </span>
                   </h3>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2"> {/* Removed ml-auto */}
                     <span className="flex items-center space-x-1 text-xs text-text-secondary">
                       {isThinkingComplete ? (
-                        <span>Took {Math.floor(thinkingDuration || 0)}s</span>
+                        null
                       ) : (
                         <>
                           <Clock size={14} />
@@ -105,7 +138,7 @@ const AIResponseBlock = ({ response }) => {
                   </div>
                 </div>
                 <div className={`overflow-y-auto transition-all duration-300 ease-in-out ${isThinkingOpen ? 'max-h-72 opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words pl-5 italic text-text-secondary">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words pl-5 italic text-text-secondary border-l-2 border-primary-500"> {/* Added border-l-2 and border-primary-500 */}
                     {thinking}
                     {!isThinkingComplete && <span className="animate-pulse">_</span>}
                   </p>
