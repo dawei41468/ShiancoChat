@@ -142,7 +142,7 @@ export const ChatProvider = ({ children }) => {
     fetchMessages(currentConversationId);
   }, [currentConversationId, fetchMessages]);
 
-  const handleSendMessage = async (text) => {
+  const handleSendMessage = async (text, isWebSearchEnabled = false) => {
     if (!text || !text.trim() || !currentConversationId || !selectedModel || !user) return; // Prevent sending message if no user
 
     // --- 1. Save User Message ---
@@ -194,7 +194,7 @@ export const ChatProvider = ({ children }) => {
     // --- 3. Stream and Process AI Response ---
     try {
       const finalMessageState = { ...aiResponsePlaceholder };
-      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal });
+      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled });
 
       for await (const event of iterator) {
         switch (event.event) {

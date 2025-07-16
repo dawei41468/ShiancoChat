@@ -23,7 +23,7 @@ export const ToastProvider = ({ children }) => {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {toast && (
-        <div className={`fixed top-6 right-6 p-4 rounded-md shadow-lg text-sm z-50
+        <div className={`fixed top-14 right-14 p-4 rounded-md shadow-lg text-sm z-50
           ${toast.type === 'success' ? 'bg-green-100 border border-green-400 text-green-700' : 'bg-red-100 border border-red-400 text-red-700'}`}>
           {toast.message}
         </div>

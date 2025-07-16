@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Image, Globe } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
@@ -62,11 +62,12 @@ const ChatInput = ({ sidebarOpen }) => {
     setIsChatInputFullScreen,
     handleStopGeneration,
   } = useChat();
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (inputValue.trim() && !isTyping) {
-      handleSendMessage(inputValue);
+      handleSendMessage(inputValue, isWebSearchEnabled);
       if (textareaRef.current) {
         textareaRef.current.style.height = '40px';
         setIsChatInputFullScreen(false);
@@ -83,6 +84,10 @@ const ChatInput = ({ sidebarOpen }) => {
 
   const handleToggleFullScreen = () => {
     setIsChatInputFullScreen(prev => !prev);
+  };
+
+  const handleToggleWebSearch = () => {
+    setIsWebSearchEnabled(prev => !prev);
   };
 
   return (
@@ -125,7 +130,10 @@ const ChatInput = ({ sidebarOpen }) => {
                 <AttachmentMenu />
                 <button
                   type="button"
-                  className="flex items-center space-x-1 p-2 rounded-xl hover:bg-hover text-text-secondary"
+                  onClick={handleToggleWebSearch}
+                  className={`flex items-center space-x-1 p-2 rounded-xl transition-colors ${
+                    isWebSearchEnabled ? 'bg-purple-gradient text-white' : 'hover:bg-hover text-text-secondary'
+                  }`}
                   aria-label="Web search"
                 >
                   <Globe className="w-5 h-5" />
