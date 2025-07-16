@@ -79,5 +79,6 @@ class StreamRequestPayload(BaseModel):
     conversation_id: str
     text: str
     model: str # Model is required to know which LLM to call
+    web_search_enabled: Optional[bool] = False
 class TitleGenerationRequest(BaseModel):
     model: str

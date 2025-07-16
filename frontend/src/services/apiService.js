@@ -38,11 +38,14 @@ export const fetchAvailableModels = () => {
   return apiClient.get('/api/llm/models');
 };
 
-export const streamChatResponse = (payload, { signal }) => {
+export const streamChatResponse = (payload, { signal, webSearchEnabled }) => {
     const modelType = payload.model.startsWith('ollama/') ? 'ollama' : 'openai';
     const url = `${BACKEND_URL}/api/${modelType}/chat`;
     
-    // Pass the full payload and signal to the streaming service
+    // Add web_search_enabled directly to the payload
+    payload.web_search_enabled = webSearchEnabled;
+
+    // Pass the modified payload and signal to the streaming service
     return streamResponse(url, { ...payload, signal });
 };
 
