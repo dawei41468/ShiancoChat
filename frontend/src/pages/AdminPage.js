@@ -63,7 +63,7 @@ export default function AdminPage() {
       setUsers(prevUsers =>
         prevUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
       );
-      showToast(`User role updated to ${newRole}`, 'success');
+      showToast(t.roleUpdatedSuccess.replace('{role}', newRole), 'success');
     } catch (err) {
       setError(err);
       console.error("Failed to update user role:", err);
@@ -72,21 +72,34 @@ export default function AdminPage() {
   };
 
   const handleDeleteUser = async (userId, username) => {
-    try {
-      await deleteUser(userId);
-      setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-      showToast(`User ${username} deleted successfully.`, 'success');
-    } catch (err) {
-      setError(err);
-      console.error("Failed to delete user:", err);
-      showToast(`Failed to delete user: ${err.message}`, 'error');
+    if (window.confirm(t.deleteUserConfirm.replace('{username}', username))) {
+      try {
+        await deleteUser(userId);
+        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+        showToast(t.userDeletedSuccess.replace('{username}', username), 'success');
+      } catch (err) {
+        setError(err);
+        console.error("Failed to delete user:", err);
+        showToast(`Failed to delete user: ${err.message}`, 'error');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-text-secondary">{t.loadingUsers}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain p-8 transition-colors duration-300 bg-background text-text-primary">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-extrabold mb-8 text-text-primary">{t.adminPanelTitle || "Admin Panel"}</h1>
+        <h1 className="text-4xl font-extrabold mb-8 text-text-primary">{t.adminPanelTitle}</h1>
         <div className="mb-8 border-b border-gray-200 dark:border-gray-700">
           <ul className="flex flex-wrap -mb-px text-sm font-medium text-center" id="admin-tabs" role="tablist">
             <li className="me-2" role="presentation">
@@ -99,7 +112,7 @@ export default function AdminPage() {
                 aria-selected={activeTab === 'user-management'}
                 onClick={() => handleTabClick('user-management')}
               >
-                {t.userManagement || "User Management"}
+                {t.userManagement}
               </button>
             </li>
             <li className="me-2" role="presentation">
@@ -112,7 +125,7 @@ export default function AdminPage() {
                 aria-selected={activeTab === 'chat-settings'}
                 onClick={() => handleTabClick('chat-settings')}
               >
-                {t.chatSettings || "Chat Settings"}
+                {t.chatSettings}
               </button>
             </li>
             <li className="me-2" role="presentation">
@@ -125,28 +138,28 @@ export default function AdminPage() {
                 aria-selected={activeTab === 'admin-settings'}
                 onClick={() => handleTabClick('admin-settings')}
               >
-                {t.adminSettings || "Admin Settings"}
+                {t.adminSettings}
               </button>
             </li>
           </ul>
         </div>
         <div id="admin-tab-content">
           <div className={`${activeTab === 'user-management' ? 'block' : 'hidden'} p-4 rounded-lg bg-gray-50 dark:bg-gray-800`} id="user-management" role="tabpanel" aria-labelledby="user-management-tab">
-            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.userManagement || "User Management"}</h2>
+            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.userManagement}</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                   <tr>
-                    <th scope="col" className="px-6 py-3">User Info</th>
-                    <th scope="col" className="px-6 py-3">User ID</th>
-                    <th scope="col" className="px-6 py-3">Role</th>
-                    <th scope="col" className="px-6 py-3">Actions</th>
+                    <th scope="col" className="px-6 py-3">{t.userInfo}</th>
+                    <th scope="col" className="px-6 py-3">{t.userId}</th>
+                    <th scope="col" className="px-6 py-3">{t.role}</th>
+                    <th scope="col" className="px-6 py-3">{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-4 text-center">Loading users...</td>
+                      <td colSpan="5" className="px-6 py-4 text-center">{t.loadingUsers}</td>
                     </tr>
                   ) : error ? (
                     <tr>
@@ -154,7 +167,7 @@ export default function AdminPage() {
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-4 text-center">No users found.</td>
+                      <td colSpan="5" className="px-6 py-4 text-center">{t.noUsersFound}</td>
                     </tr>
                   ) : (
                     users.map((user) => (
@@ -169,8 +182,8 @@ export default function AdminPage() {
                               onChange={(e) => handleRoleChange(user.id, e.target.value)}
                               disabled={loggedInUser && loggedInUser.id === user.id}
                             >
-                              <option value="User">User</option>
-                              <option value="Admin">Admin</option>
+                              <option value="User">{t.user}</option>
+                              <option value="Admin">{t.admin}</option>
                             </select>
                           </div>
                         </td><td className="px-6 py-2">
@@ -178,7 +191,7 @@ export default function AdminPage() {
                             className="font-medium text-red-600 dark:text-red-500"
                             onClick={() => handleDeleteUser(user.id, user.name)}
                           >
-                            Delete
+                            {t.delete}
                           </button>
                         </td></tr>
                     ))
@@ -188,15 +201,15 @@ export default function AdminPage() {
             </div>
           </div>
           <div className={`${activeTab === 'chat-settings' ? 'block' : 'hidden'} p-4 rounded-lg bg-gray-50 dark:bg-gray-800`} id="chat-settings" role="tabpanel" aria-labelledby="chat-settings-tab">
-            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.chatSettings || "Chat Settings"}</h2>
+            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.chatSettings}</h2>
             <p className="text-lg text-text-secondary">
-              {t.chatSettingsPlaceholder || "Placeholder for Chat Settings."}
+              {t.chatSettingsPlaceholder}
             </p>
           </div>
           <div className={`${activeTab === 'admin-settings' ? 'block' : 'hidden'} p-4 rounded-lg bg-gray-50 dark:bg-gray-800`} id="admin-settings" role="tabpanel" aria-labelledby="admin-settings-tab">
-            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.adminSettings || "Admin Settings"}</h2>
+            <h2 className="text-2xl font-bold mb-4 text-text-primary">{t.adminSettings}</h2>
             <p className="text-lg text-text-secondary">
-              {t.adminSettingsPlaceholder || "Placeholder for Admin Settings."}
+              {t.adminSettingsPlaceholder}
             </p>
           </div>
         </div>
