@@ -47,8 +47,40 @@
 /* 
   ========================================
   GLOBAL STYLES
-  ========================================
-*/
+  ======================================== */
+
+/* Fix for double-tap and click issues on mobile/tablet */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Enable text selection for content areas */
+p, h1, h2, h3, h4, h5, h6, span, div, a, button, input, textarea, select {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Improve touch response */
+button, a, [role="button"], [role="tab"], [role="menuitem"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fix for fast clicks on mobile */
+@media (hover: none) {
+  button, a, [role="button"], [role="tab"], [role="menuitem"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
 html, body {
     margin: 0;
     padding: 0;
@@ -138,6 +170,7 @@ select:focus {
   background: linear-gradient(to right, var(--color-purple-gradient-start), var(--color-purple-gradient-end), var(--color-purple-gradient-start));
   background-size: 200% auto;
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: gradient-animation 3s linear infinite;
 }
