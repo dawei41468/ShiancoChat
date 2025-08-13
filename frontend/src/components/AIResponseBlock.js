@@ -55,7 +55,7 @@ const AIResponseBlock = ({ response }) => {
 
   useEffect(() => {
     if (thinking && !isThinkingComplete) {
-      setIsThinkingOpen(true); // Automatically open when thinking starts
+      // Do not automatically open when thinking starts, allow user control
       
       const animate = () => {
         setLiveDuration((Date.now() - thinkingStartTime) / 1000);
@@ -69,7 +69,7 @@ const AIResponseBlock = ({ response }) => {
         }
       };
     } else if (isThinkingComplete) {
-      setIsThinkingOpen(false); // Auto collapse when thinking is complete
+      // Keep user preference, do not auto collapse
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }

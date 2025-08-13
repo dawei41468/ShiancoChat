@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from typing import List
 from backend.database import get_db
 from backend.models import Message, MessageSavePayload, Conversation, ConversationCreate, UpdateConversationTitleRequest, User, TitleGenerationRequest
-from datetime import datetime
+from datetime import datetime, timezone
 from backend import auth # Import auth module for get_current_user
 
 router = APIRouter()
@@ -20,8 +19,8 @@ async def create_new_chat(
     new_conversation = Conversation(
         title=conversation_data.title,
         user_email=current_user.email, # Assign conversation to the current user
-        created_at=datetime.utcnow(),
-        last_updated=datetime.utcnow()
+        created_at=datetime.now(timezone.utc),
+        last_updated=datetime.now(timezone.utc)
     )
     await db.conversations.insert_one(new_conversation.dict())
     return new_conversation
@@ -71,7 +70,7 @@ async def save_message(
         conversation_id=message_data.conversation_id,
         sender=message_data.sender,
         text=message_data.text,
-        timestamp=message_data.timestamp or datetime.utcnow(),
+        timestamp=message_data.timestamp or datetime.now(timezone.utc),
         thinking_duration=message_data.thinking_duration
     )
     
@@ -101,7 +100,7 @@ async def rename_conversation(
     
     await db.conversations.update_one(
         {"id": conversation_id},
-        {"$set": {"title": update_data.new_title, "last_updated": datetime.utcnow()}}
+        {"$set": {"title": update_data.new_title, "last_updated": datetime.now(timezone.utc)}}
     )
     
     updated_conversation = await db.conversations.find_one({"id": conversation_id})
@@ -145,6 +144,6 @@ async def generate_conversation_title(
     
     await db.conversations.update_one(
         {"id": conversation_id},
-        {"$set": {"title": new_title, "last_updated": datetime.utcnow()}}
+        {"$set": {"title": new_title, "last_updated": datetime.now(timezone.utc)}}
     )
     return {"message": "Title generation initiated", "new_title": new_title}

@@ -1,21 +1,13 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 import uuid
 from datetime import datetime
 from enum import Enum
-
-class Department(str, Enum):
-   SENIOR_MANAGEMENT = "高层管理"
-   GENERAL_OFFICE = "总经办"
-   XISHAN_HOME = "锡山家居"
-   KAKA_TIME = "咖咖时光"
-   AGIO_BUSINESS = "Agio 业务"
-   AGIO_RD = "Agio 研发"
-   PRODUCTION_DEPT = "生产事业部"
+from backend.localization.departments import Department, get_department_name
 
 class UserRole(str, Enum):
-   USER = "User"
-   ADMIN = "Admin"
+    USER = "User"
+    ADMIN = "Admin"
 
 class User(BaseModel):
    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -25,6 +17,12 @@ class User(BaseModel):
    department: Department
    role: UserRole = UserRole.USER
    created_at: datetime = Field(default_factory=datetime.utcnow)
+   language: str = "zh"
+
+   @property
+   def department_display_name(self) -> str:
+       from backend.localization.departments import get_department_name
+       return get_department_name(self.department, self.language)
 
 class UserCreate(BaseModel):
    name: str
@@ -41,9 +39,17 @@ class UserRoleUpdate(BaseModel):
 class Token(BaseModel):
    access_token: str
    token_type: str
+   refresh_token: Optional[str] = None
 
 class TokenData(BaseModel):
    email: Optional[str] = None
+
+class RefreshToken(BaseModel):
+   token: str = Field(default_factory=lambda: str(uuid.uuid4()))
+   email: str
+   expires_at: datetime
+   is_active: bool = True
+   created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

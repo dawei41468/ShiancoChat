@@ -7,6 +7,42 @@ const apiClient = axios.create({
   baseURL: BACKEND_URL,
 });
 
+// Add response interceptor for token refresh
+apiClient.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+    
+    // If 401 and not a refresh request
+    if (error.response?.status === 401 &&
+        !originalRequest._retry &&
+        !originalRequest.url.includes('/auth/refresh')) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (!refreshToken) throw new Error('No refresh token');
+        
+        const refreshResponse = await apiClient.post('/api/auth/refresh', { refresh_token: refreshToken });
+        const { access_token } = refreshResponse.data;
+        
+        localStorage.setItem('access_token', access_token);
+        setAuthHeader(access_token);
+        originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
+        
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Clear tokens if refresh fails
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setAuthHeader(null);
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const setAuthHeader = (token) => {
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -57,13 +93,21 @@ export const generateConversationTitle = (conversationId, model) => {
   return apiClient.post(`/api/chat/conversations/${conversationId}/generate-title`, { model });
 };
 
-export const login = (email, password) => {
+export const login = async (email, password) => {
   const formData = new URLSearchParams();
   formData.append('username', email);
   formData.append('password', password);
-  return apiClient.post('/api/auth/login', formData, {
+  const response = await apiClient.post('/api/auth/login', formData, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
+  
+  // Store both tokens
+  const { access_token, refresh_token } = response.data;
+  localStorage.setItem('access_token', access_token);
+  localStorage.setItem('refresh_token', refresh_token);
+  setAuthHeader(access_token);
+  
+  return response;
 };
 
 export const register = (userData) => {
@@ -76,6 +120,12 @@ export const getCurrentUser = () => {
 
 export const updateUser = (userData) => {
   return apiClient.patch('/api/auth/users/me', userData);
+};
+
+export const logout = () => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  setAuthHeader(null);
 };
 
 export const deleteAccount = () => {

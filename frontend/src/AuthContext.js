@@ -6,28 +6,53 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem('access_token'));
 
   useEffect(() => {
-    if (token) {
-      setAuthHeader(token);
-      getCurrentUser()
-        .then(response => {
-          setUser(response.data);
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
-          setAuthHeader(null);
-        });
-    }
-  }, [token]);
+    const initializeAuth = async () => {
+      const accessToken = localStorage.getItem('access_token');
+      if (accessToken) {
+        setAuthHeader(accessToken);
+        try {
+          const userResponse = await getCurrentUser();
+          setUser(userResponse.data);
+          setToken(accessToken);
+        } catch (error) {
+          // If token is invalid, try to refresh
+          try {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (refreshToken) {
+              const refreshResponse = await axios.post(
+                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100'}/api/auth/refresh`,
+                { refresh_token: refreshToken }
+              );
+              const { access_token } = refreshResponse.data;
+              localStorage.setItem('access_token', access_token);
+              setAuthHeader(access_token);
+              setToken(access_token);
+              const userResponse = await getCurrentUser();
+              setUser(userResponse.data);
+            } else {
+              throw error;
+            }
+          } catch (refreshError) {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            setToken(null);
+            setUser(null);
+            setAuthHeader(null);
+          }
+        }
+      }
+    };
+    initializeAuth();
+  }, []);
 
   const login = async (email, password) => {
     const response = await apiLogin(email, password);
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
+    const { access_token, refresh_token } = response.data;
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('refresh_token', refresh_token);
     setToken(access_token);
     setAuthHeader(access_token);
     const userResponse = await getCurrentUser();
@@ -39,7 +64,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setToken(null);
     setUser(null);
     setAuthHeader(null);

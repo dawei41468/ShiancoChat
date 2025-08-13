@@ -131,13 +131,13 @@ const ChatInput = ({ sidebarOpen }) => {
                 <button
                   type="button"
                   onClick={handleToggleWebSearch}
-                  className={`flex items-center space-x-1 p-2 rounded-xl transition-colors ${
+                  className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
                     isWebSearchEnabled ? 'bg-purple-gradient text-white' : 'hover:bg-hover text-text-secondary'
                   }`}
                   aria-label="Web search"
                 >
-                  <Globe className="w-5 h-5" />
-                  <span className="text-sm font-medium">{t.webSearch || "Web Search"}</span>
+                  <Globe className="w-4 h-4" />
+                  <span className="text-xs font-medium">{t.webSearch || "Web Search"}</span>
                 </button>
               </div>
               <div className="flex items-center">
@@ -154,7 +154,7 @@ const ChatInput = ({ sidebarOpen }) => {
                   <button
                     type="submit"
                     disabled={!inputValue.trim()}
-                    className={`p-2 rounded-xl transition-all ${
+                    className={`p-2 mx-0.5 rounded-xl transition-all ${
                       inputValue.trim()
                         ? 'bg-purple-gradient hover:opacity-90'
                         : 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed'

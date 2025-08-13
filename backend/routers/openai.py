@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
 from backend.models import StreamRequestPayload
 from backend.database import get_db
-from backend.utils.search import perform_web_search
+from backend.utils.web_search.main import perform_web_search
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,7 +39,8 @@ def should_use_web_search(query: str) -> bool:
         "latest news", "current events", "stock price",
         "weather forecast", "live score", "election results",
         "who won", "what's the score", "is it raining",
-        "latest update", "recent news", "top headlines"
+        "latest update", "recent news", "top headlines",
+        "current president", "current prime minister", "current leader"
     ]
     if any(keyword in lower_query for keyword in search_keywords):
         return True
@@ -85,10 +86,9 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
     user_query = ""
     if payload["messages"]:
         user_query = payload["messages"][-1]["content"]
-        if input.web_search_enabled: # If the user has enabled the toggle, check if the query is a good candidate for a web search
-            if should_use_web_search(user_query):
-                perform_search = True
-                logger.info(f"Web search enabled by user and query is a good candidate for a web search: '{user_query}'")
+        if input.web_search_enabled: # If the user has enabled the toggle, always perform a web search
+            perform_search = True
+            logger.info(f"Web search explicitly enabled by user for query: '{user_query}'")
         else:  # If not manually enabled, check if we should enable it automatically
             if should_use_web_search(user_query):
                 perform_search = True
@@ -102,9 +102,9 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
         if search_results:
             search_context = "\n\nWeb Search Results:\n"
             for i, res in enumerate(search_results):
-                search_context += f"{i+1}. Title: {res.get('title', 'N/A')}\n"
-                search_context += f"   URL: {res.get('url', 'N/A')}\n"
-                search_context += f"   Snippet: {res.get('snippet', 'N/A')}\n"
+                search_context += f"{i+1}. Title: {res.title if res.title else 'N/A'}\n"
+                search_context += f"   URL: {res.url if res.url else 'N/A'}\n"
+                search_context += f"   Snippet: {res.snippet if res.snippet else 'N/A'}\n"
             search_context += "\nBased on the above web search results, answer the following question:\n"
             
             # Prepend search context to the last user message

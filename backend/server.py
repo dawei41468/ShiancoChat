@@ -14,6 +14,8 @@ from typing import List
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, HTTPException
 from starlette.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 # Load environment variables *before* other imports
 load_dotenv(ROOT_DIR / 'backend' / '.env')
@@ -33,6 +35,7 @@ async def lifespan(app: FastAPI):
 
 # Create the main app without a prefix
 app = FastAPI(lifespan=lifespan)
+limiter = Limiter(key_func=get_remote_address)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -59,7 +62,7 @@ app.include_router(users.router, prefix="/api/users")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["http://localhost:4141"], # Specific origin for frontend
+    allow_origins=["http://localhost:4141", "http://localhost:4100"], # Allowed origins
     allow_methods=["*"],
     allow_headers=["*", "Authorization"],
 )
