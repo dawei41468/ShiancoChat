@@ -1,8 +1,24 @@
 import React from 'react';
+import { useChat } from '@/ChatContext';
+import * as apiService from '@/services/apiService';
 
 const MessageBubble = ({ message, isThinking = false }) => {
   const isUser = message.sender === 'user';
-  const textContent = message.text || '';
+  let displayContent = message.text || '';
+  let ragIndicator = null;
+  
+  if (message.is_file_upload) {
+    return null; // Don't render anything for file uploads
+  }
+  
+  // Check for RAG indicators in message metadata if available
+  if (!isUser && message.metadata) {
+    if (message.metadata.rag === 'true') {
+      ragIndicator = <span className="text-xs text-blue-400 mr-1">RAG Active</span>;
+    } else if (message.metadata.rag === 'results') {
+      ragIndicator = <span className="text-xs text-blue-400 mr-1">RAG Results Used</span>;
+    }
+  }
 
   const bubbleClasses = `px-4 py-3 rounded-2xl transition-all duration-300 ease-in-out font-medium whitespace-pre-wrap ${
     isUser
@@ -25,9 +41,14 @@ const MessageBubble = ({ message, isThinking = false }) => {
         
         <div className={bubbleClasses}>
           <p className="text-sm leading-relaxed">
-            {textContent}
+            {displayContent}
             {isThinking && <span className="animate-pulse">_</span>}
           </p>
+          {ragIndicator && (
+            <div className="mt-1 flex items-center">
+              {ragIndicator}
+            </div>
+          )}
           {!isThinking && message.timestamp && (
             <p className="text-xs text-text-secondary opacity-70 mt-1">
               {message.timestamp}

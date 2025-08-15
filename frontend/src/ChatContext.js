@@ -49,6 +49,8 @@ export const ChatProvider = ({ children }) => {
   const abortControllerRef = useRef(null);
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [currentDocument, setCurrentDocument] = useState(null);
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -325,9 +327,17 @@ export const ChatProvider = ({ children }) => {
     setSelectedModel(model);
   };
 
+  const appendMessage = useCallback((message) => {
+    setMessages(prev => [...prev, {
+      ...message,
+      timestamp: new Date().toISOString(),
+    }]);
+  }, []);
+
   const chatContextValue = {
     messages,
     setMessages,
+    appendMessage,
     inputValue,
     setInputValue,
     isTyping,
@@ -354,6 +364,42 @@ export const ChatProvider = ({ children }) => {
     handleSelectConversation,
     handleRenameConversation,
     handleDeleteConversation,
+    documents,
+    currentDocument,
+    uploadDocument: async (file, conversationId) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (conversationId) {
+        formData.append('conversation_id', conversationId);
+      }
+      
+      try {
+        const response = await apiService.uploadDocument(formData);
+        setDocuments(prev => [...prev, response.data]);
+        return response.data;
+      } catch (error) {
+        console.error('Error uploading document:', error);
+        throw error;
+      }
+    },
+    deleteDocument: async (documentId) => {
+      try {
+        await apiService.deleteDocument(documentId);
+        setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
+      } catch (error) {
+        console.error('Error deleting document:', error);
+        throw error;
+      }
+    },
+    fetchDocument: async (documentId) => {
+      try {
+        const response = await apiService.fetchDocument(documentId);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching document:', error);
+        throw error;
+      }
+    },
   };
 
   return (

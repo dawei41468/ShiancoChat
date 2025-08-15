@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { uploadDocument } from '@/services/apiService';
 import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Image, Globe } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
+import * as apiService from '@/services/apiService';
 
-const AttachmentMenu = () => {
+const AttachmentMenu = ({ onFileSelect }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const menuRef = React.useRef(null);
   const { t } = useLanguage();
@@ -20,19 +22,32 @@ const AttachmentMenu = () => {
     };
   }, []);
 
+  const triggerFileInput = () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.doc,.docx,.txt';
+    fileInput.onchange = onFileSelect;
+    fileInput.click();
+    setIsOpen(false);
+  };
+
   return (
     <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-xl hover:bg-hover text-text-secondary"
-        aria-label="Attach file"
-      >
-        <Paperclip className="w-5 h-5" />
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 rounded-xl hover:bg-hover text-text-secondary"
+          aria-label="Attach file"
+        >
+          <Paperclip className="w-5 h-5" />
+        </button>
+      </div>
+      
       {isOpen && (
         <div className="absolute bottom-full left-0 mb-2 w-40 bg-surface border border-border rounded-lg shadow-lg z-10">
           <button
+            onClick={triggerFileInput}
             className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-text-primary hover:bg-hover rounded-t-lg"
           >
             <FileText className="w-4 h-4" />
@@ -61,17 +76,67 @@ const ChatInput = ({ sidebarOpen }) => {
     isChatInputFullScreen,
     setIsChatInputFullScreen,
     handleStopGeneration,
+    currentConversationId,
+    setMessages
   } = useChat();
-  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(true);
+  const [isRagEnabled, setIsRagEnabled] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !currentConversationId) {
+      console.warn('No file selected or no active conversation');
+      return;
+    }
+
+    setSelectedFile(file);
+    setIsUploading(true);
+
+    console.group('File Upload Process');
+    try {
+      console.log('Selected file:', file.name, file.size, file.type);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      console.log('FormData prepared');
+
+      console.log('Making API call to /api/documents/upload');
+      const startTime = Date.now();
+      const response = await uploadDocument(formData);
+      const duration = Date.now() - startTime;
+      
+      console.log(`Upload completed in ${duration}ms`, response);
+      
+      // Save document reference to backend without creating a message
+      await apiService.saveDocument({
+        conversation_id: currentConversationId,
+        document_id: response.data.document_id,
+        filename: response.data.filename,
+        content_type: response.data.content_type
+      });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      if (error.response) {
+        console.error('Server response:', error.response.data);
+      }
+    } finally {
+      setIsUploading(false);
+      console.groupEnd();
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (inputValue.trim() && !isTyping) {
-      handleSendMessage(inputValue, isWebSearchEnabled);
+      handleSendMessage(inputValue, isWebSearchEnabled, isRagEnabled);
       if (textareaRef.current) {
         textareaRef.current.style.height = '40px';
         setIsChatInputFullScreen(false);
       }
+      // Reset selected file after sending message to clear the UI element
+      setSelectedFile(null);
     }
   };
 
@@ -88,6 +153,10 @@ const ChatInput = ({ sidebarOpen }) => {
 
   const handleToggleWebSearch = () => {
     setIsWebSearchEnabled(prev => !prev);
+  };
+
+  const handleToggleRag = () => {
+    setIsRagEnabled(prev => !prev);
   };
 
   return (
@@ -127,18 +196,40 @@ const ChatInput = ({ sidebarOpen }) => {
             </div>
             <div className="flex justify-between items-center p-0.5 rounded-b-xl">
               <div className="flex items-center space-x-2">
-                <AttachmentMenu />
+                <AttachmentMenu onFileSelect={handleFileSelect} />
                 <button
                   type="button"
                   onClick={handleToggleWebSearch}
                   className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
-                    isWebSearchEnabled ? 'bg-purple-gradient text-white' : 'hover:bg-hover text-text-secondary'
+                    isWebSearchEnabled ? 'bg-purple-gradient text-white' : 'bg-surface border border-border hover:bg-hover text-text-secondary'
                   }`}
                   aria-label="Web search"
                 >
                   <Globe className="w-4 h-4" />
                   <span className="text-xs font-medium">{t.webSearch || "Web Search"}</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={handleToggleRag}
+                  className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
+                    isRagEnabled ? 'bg-blue-500 text-white' : 'bg-surface border border-border hover:bg-hover text-text-secondary'
+                  }`}
+                  aria-label="RAG search"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="text-xs font-medium">{t.rag || "RAG"}</span>
+                </button>
+                {(selectedFile || isUploading) && (
+                  <div className="flex items-center gap-1 text-xs text-text-secondary bg-hover px-2 py-1 rounded-lg">
+                    <FileText className="w-3 h-3" />
+                    <span className="truncate max-w-[80px]">{selectedFile?.name}</span>
+                    {isUploading ? (
+                      <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    ) : (
+                      <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center">
                 {isTyping ? (

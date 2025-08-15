@@ -84,3 +84,25 @@ The backend is a FastAPI application that serves as a multi-provider API gateway
 
 *   **Future LLM Enhancements:**
     *   **MCP Server Access for LLM:** Integration of an MCP server to allow the local LLM to browse the live internet for up-to-date information.
+
+## Document Management Enhancements Based on Open-WebUI Best Practices
+
+### Insights from Open-WebUI
+Open-WebUI handles document uploads with advanced features like chunking, vector embeddings, and persistent storage using databases like Qdrant. Best practices include:
+- Chunking documents for efficient processing and retrieval.
+- Generating embeddings for semantic search.
+- Using persistent storage (e.g., SQLite or vector databases) instead of in-memory solutions.
+- Enhancing user interfaces for document previews and search results.
+
+### Proposed Modifications
+1. **Document Chunking:** Use RecursiveCharacterTextSplitter to break documents into chunks.
+2. **Embeddings and Search:** Integrate sentence-transformers to generate embeddings and add basic search functionality.
+3. **Persistent Storage:** Switch from in-memory storage to SQLite for reliability.
+4. **Frontend Enhancements:** Update components to display previews and integrate search.
+
+### Step-by-Step Implementation Plan
+- [ ] Update backend/models.py to include 'chunks' and 'embeddings' fields.
+- [ ] Modify backend/routers/documents.py to handle chunking and embedding generation during uploads.
+- [ ] Implement SQLite integration in backend for persistent storage.
+- [ ] Enhance frontend components (e.g., ChatInput, MessageBubble) for search and previews.
+- [ ] Test the updated system for errors and performance.

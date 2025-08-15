@@ -8,6 +8,7 @@ from datetime import datetime
 from backend.models import StreamRequestPayload
 from backend.database import get_db
 from backend.utils.web_search.main import perform_web_search
+from backend.utils.rag import embed_query, search_chunks
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,12 +95,45 @@ async def chat_with_ollama(input: StreamRequestPayload, request: Request, db=Dep
             # Add a notice to the user that the web search failed
             payload["messages"][-1]["content"] = "(Web search failed. Answering based on my existing knowledge.)\n\n" + user_query
 
+    # Handle RAG if enabled
+    perform_rag = input.rag_enabled
+    rag_context = ""
+    if perform_rag and user_query:
+        logger.info(f"RAG enabled for query: '{user_query}'")
+        query_embedding = await embed_query(user_query)
+        if query_embedding:
+            chunks = await search_chunks("", query_embedding, top_k=5, threshold=0.7, conversation_id=input.conversation_id)
+            if chunks:
+                rag_context = "\n\nRelevant Document Chunks:\n"
+                for i, chunk in enumerate(chunks):
+                    rag_context += f"{i+1}. Document ID: {chunk['document_id']}, Chunk {chunk['chunk_index']}\n"
+                    rag_context += f"   Content: {chunk['content'][:200]}...\n"
+                    rag_context += f"   Similarity: {chunk['similarity']:.2f}\n"
+                rag_context += "\nUse the above document chunks to inform your response if relevant:\n"
+                payload["messages"][-1]["content"] = rag_context + payload["messages"][-1]["content"]
+                logger.info(f"Augmented prompt with RAG document chunks for Ollama.")
+            else:
+                logger.info("No relevant document chunks found for RAG.")
+                payload["messages"][-1]["content"] = "(No relevant documents found. Answering based on conversation history.)\n\n" + payload["messages"][-1]["content"]
+        else:
+            logger.warning("Failed to embed query for RAG.")
+            payload["messages"][-1]["content"] = "(RAG embedding failed. Answering based on conversation history.)\n\n" + payload["messages"][-1]["content"]
+
     async def stream_response():
         """
         Streams the raw response to the client, handling disconnection.
         This function now directly handles the httpx call to ensure
         the connection to the LLM is closed immediately on client disconnect.
         """
+        # Signal RAG start if enabled
+        if perform_rag:
+            yield f"data: <rag>true</rag>\n\n"
+            if rag_context:
+                yield f"data: <rag>results</rag>\n\n"
+            else:
+                yield f"data: <rag>no_results</rag>\n\n"
+            yield f"data: <rag>false</rag>\n\n"
+
         try:
             async with httpx.AsyncClient(timeout=120) as client:
                 async with client.stream("POST", "http://localhost:11434/api/chat", json=payload) as response:

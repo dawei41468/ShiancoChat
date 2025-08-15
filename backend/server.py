@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
+import logging
 # Add the project root to the Python path to resolve import issues
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT_DIR))
+logger = logging.getLogger(__name__)
 
 import os
 import logging
@@ -17,14 +19,22 @@ from starlette.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Load environment variables *before* other imports
-load_dotenv(ROOT_DIR / 'backend' / '.env')
+# Load environment variables *before* other imports - quietly without logging
+load_dotenv(ROOT_DIR / 'backend' / '.env', verbose=False)
 
-from backend.database import close_mongo_connection
-from routers import chat, ollama, openai, auth, users
+# Set tokenizers parallelism to avoid warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# Get port from environment variable, default to 8000 if not set
-PORT = int(os.environ.get("PORT", 8000))
+# Only log environment variables if we're the main process (not reloader)
+if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('WERKZEUG_RUN_MAIN'):
+    from backend.database import close_mongo_connection
+else:
+    from backend.database import close_mongo_connection
+from routers import chat, ollama, openai, auth, users, documents
+logger.info(f"Imported routers: {[r.__name__ for r in [chat, ollama, openai, auth, users, documents]]}")
+
+# Get port from environment variable, default to 4100 if not set
+PORT = int(os.environ.get("PORT", 4100))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,6 +68,17 @@ app.include_router(openai.router, prefix="/api/openai")
 app.include_router(chat.router, prefix="/api/chat")
 app.include_router(auth.router, prefix="/api/auth")
 app.include_router(users.router, prefix="/api/users")
+app.include_router(documents.router)
+logger.info("Successfully mounted documents router")
+
+from fastapi.routing import APIRoute
+
+# Debug all registered routes
+for route in app.routes:
+    if isinstance(route, APIRoute):
+        logger.info(f"Route: {route.path} (methods: {route.methods})")
+    else:
+        logger.info(f"Route: {route.__class__.__name__}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +93,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=PORT,
+        reload=True,
+        log_level="info",
+        log_config={
+            "version": 1,
+            "disable_existing_loggers": False,
+            "loggers": {
+                "uvicorn": {"level": "INFO"},
+                "uvicorn.error": {"level": "INFO"},
+                "uvicorn.access": {"level": "INFO"},
+                "uvicorn.asgi": {"level": "CRITICAL"}
+            }
+        }
+    )

@@ -10,8 +10,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from backend.auth import get_current_user
+from fastapi import Body
 from backend.models import User, UserCreate, Token, UserUpdate
 from backend.config import config as settings
+from pydantic import BaseModel
+
+class RefreshToken(BaseModel):
+    refresh_token: str
 
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
@@ -60,8 +65,8 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
 
 @router.post("/refresh", response_model=Token)
 @limiter.limit("5/minute")
-async def refresh_access_token(request: Request, refresh_token: str):
-    token_data = await UserService.validate_refresh_token(refresh_token)
+async def refresh_access_token(request: Request, refresh: RefreshToken = Body(...)):
+    token_data = await UserService.validate_refresh_token(refresh.refresh_token)
     if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

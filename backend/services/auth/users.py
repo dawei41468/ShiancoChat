@@ -80,7 +80,8 @@ class UserService:
         refresh_token = RefreshToken(
             token=token,
             email=email,
-            expires_at=expires_at
+            expires_at=expires_at,
+            is_active=True
         )
         await db.refresh_tokens.insert_one(refresh_token.dict())
 

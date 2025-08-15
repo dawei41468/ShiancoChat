@@ -38,3 +38,22 @@ async def delete_user(user_email: str):
 
 def close_mongo_connection():
     client.close()
+
+async def init_vector_index():
+    """Initialize vector index for document embeddings if supported."""
+    try:
+        db = await get_db()
+        # Check if index already exists
+        indexes = await db.document_chunks.list_indexes().to_list(100)  # Arbitrary high number to get all indexes
+        index_names = [index['name'] for index in indexes]
+        if 'embedding_vector_idx' not in index_names:
+            # Create a vector index for embeddings (assuming MongoDB Atlas or compatible)
+            await db.document_chunks.create_index(
+                [("embedding", "2dsphere")],
+                name="embedding_vector_idx"
+            )
+            print("Vector index created on document_chunks.embedding")
+        else:
+            print("Vector index already exists on document_chunks.embedding")
+    except Exception as e:
+        print(f"Error creating vector index: {str(e)}. Vector search may not be supported.")

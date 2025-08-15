@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from typing import Optional, List
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -86,5 +86,26 @@ class StreamRequestPayload(BaseModel):
     text: str
     model: str # Model is required to know which LLM to call
     web_search_enabled: Optional[bool] = False
+    rag_enabled: Optional[bool] = False
 class TitleGenerationRequest(BaseModel):
     model: str
+
+class DocumentChunk(BaseModel):
+    """Model for storing document chunks and embeddings"""
+    document_id: str
+    chunk_index: int
+    content: str
+    embedding: Optional[List[float]] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class Document(BaseModel):
+    """Model for storing uploaded documents and their extracted text"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    filename: str
+    user_email: Optional[str] = None
+    content: str
+    content_type: str
+    expires_at: datetime
+    conversation_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    chunk_count: int = 0

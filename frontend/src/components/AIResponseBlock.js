@@ -46,8 +46,25 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
 };
 
 const AIResponseBlock = ({ response }) => {
+  const getStatusText = () => {
+    const { t, webSearchState, isThinkingComplete, thinkingDuration } = response;
+    if (isThinkingComplete) {
+      return t?.thoughtForSeconds || `Thought for ${Math.floor(thinkingDuration || 0)} seconds`;
+    }
+    if (webSearchState === 'results') {
+      return t?.webSearchFound || 'Found web results...';
+    }
+    if (webSearchState === 'no_results') {
+      return t?.webSearchEmpty || 'No web results found...';
+    }
+    if (webSearchState === 'true') {
+      return t?.webSearching || 'Searching the web...';
+    }
+    return t?.thinking || 'Thinking...';
+  };
+
   const { theme } = useTheme();
-  const { thinking, answer, isThinkingComplete, thinkingStartTime, thinkingDuration } = response;
+  const { thinking, answer, isThinkingComplete, thinkingStartTime, thinkingDuration, isWebSearch } = response;
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const [liveDuration, setLiveDuration] = useState(0);
   const { t } = useLanguage();
@@ -120,7 +137,7 @@ const AIResponseBlock = ({ response }) => {
                       </svg>
                     )}
                     <span className={!isThinkingComplete ? "animated-gradient-text" : ""}>
-                      {isThinkingComplete ? t.thoughtForSeconds || `Thought for ${Math.floor(thinkingDuration || 0)} seconds` : t.thinking || 'Thinking...'}
+                      {getStatusText()}
                     </span>
                   </h3>
                   <div className="flex items-center space-x-2"> {/* Removed ml-auto */}

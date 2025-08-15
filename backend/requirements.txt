@@ -107,3 +107,6 @@ SQLAlchemy==2.0.30
 psycopg2-binary==2.9.9
 ddgs
 slowapi==0.1.7
+langchain
+sentence-transformers
+pinecone-client  # For vector database

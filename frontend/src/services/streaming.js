@@ -1,7 +1,7 @@
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 
 async function* parseStreamByTags(textStream) {
-    let state = 'seeking'; // 'seeking', 'in_think', 'in_answer'
+    let state = 'seeking'; // 'seeking', 'in_think', 'in_answer', 'in_websearch'
     let buffer = '';
 
     for await (const textChunk of textStream) {

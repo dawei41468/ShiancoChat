@@ -6,6 +6,11 @@ import { useAuth } from '../AuthContext'; // Import useAuth
 
 export default function AdminPage() {
   const { t } = useLanguage();
+  console.log('Translation values:', {
+    userManagement: t.userManagement,
+    chatSettings: t.chatSettings,
+    adminSettings: t.adminSettings
+  });
   const { user: loggedInUser } = useAuth(); // Get loggedInUser from AuthContext
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('user-management');

@@ -16,7 +16,7 @@ const SuggestedPrompts = ({ prompts, onPromptClick }) => {
         const IconComponent = LucideIconMap[prompt.icon];
         return (
           <button
-            key={index}
+            key={prompt.id}
             onClick={() => onPromptClick(prompt)}
             className="p-4 rounded-xl transition-colors text-left border bg-surface border-border hover:bg-hover"
           >

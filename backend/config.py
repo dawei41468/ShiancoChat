@@ -49,8 +49,16 @@ class AppConfig(BaseSettings):
     password_min_length: int = Field(default=12)
     
     # Search settings
-    web_search_engine: str = Field(default="duckduckgo")
-    brave_api_key: Optional[str] = Field(default=None)
+    web_search: dict = Field(
+        default={
+            "default_engine": "duckduckgo",
+            "bing_api_key": None,
+            "sougou_api_key": None,
+            "max_results": 5,
+            "domain_filter": None
+        },
+        description="Web search configuration"
+    )
     
     # LLM settings
     llm_base_url: Optional[str] = Field(
@@ -87,11 +95,14 @@ def load_config() -> AppConfig:
     print(f"Loading environment variables from: {env_path}")
     load_dotenv(env_path)
     
-    # Debug print environment variables
+    # Log environment variables
     import os
     print("Environment variables:")
-    for var in ['SECRET_KEY', 'MONGO_URL', 'DB_NAME', 'LLM_BASE_URL']:
-        print(f"{var}: {os.getenv(var)}")
+    for var in ['PORT', 'SECRET_KEY', 'MONGO_URL', 'DB_NAME', 'LLM_BASE_URL']:
+        value = os.getenv(var)
+        if var == 'SECRET_KEY' and value:
+            value = '******'  # Mask secret key
+        print(f"{var}: {value if value else 'Not set'}")
     
     try:
         return AppConfig()  # Will raise validation error if required fields are missing
