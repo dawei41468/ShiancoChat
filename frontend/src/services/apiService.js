@@ -156,8 +156,7 @@ export const fetchAvailableModels = () => {
 };
 
 export const streamChatResponse = (payload, { signal, webSearchEnabled, ragEnabled }) => {
-    const modelType = payload.model.startsWith('ollama/') ? 'ollama' : 'openai';
-    const url = `${BACKEND_URL}/api/${modelType}/chat`;
+    const url = `${BACKEND_URL}/api/openai/chat`;
     
     // Structure payload according to StreamRequestPayload model
     const requestPayload = {

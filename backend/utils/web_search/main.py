@@ -50,7 +50,7 @@ async def perform_web_search(
         for i, engine_results in enumerate(results_lists):
             if isinstance(engine_results, BaseException):
                 engine_name = selected_engines[i]
-                logger.warning(f"Search engine {engine_name} failed: {str(engine_results)}")
+                logger.error(f"Web search failed: {str(engine_results)}")
                 continue
             if hasattr(engine_results, '__iter__') and not isinstance(engine_results, str):
                 # Validate results before adding

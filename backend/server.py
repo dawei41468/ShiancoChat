@@ -30,8 +30,8 @@ if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('WERKZEUG_RUN_MAIN
     from backend.database import close_mongo_connection
 else:
     from backend.database import close_mongo_connection
-from routers import chat, ollama, openai, auth, users, documents
-logger.info(f"Imported routers: {[r.__name__ for r in [chat, ollama, openai, auth, users, documents]]}")
+from routers import chat, openai, auth, users, documents
+logger.info(f"Imported routers: {[r.__name__ for r in [chat, openai, auth, users, documents]]}")
 
 # Get port from environment variable, default to 4100 if not set
 PORT = int(os.environ.get("PORT", 4100))
@@ -63,7 +63,6 @@ async def root():
 # --- App Configuration ---
 
 app.include_router(api_router)
-app.include_router(ollama.router, prefix="/api/ollama")
 app.include_router(openai.router, prefix="/api/openai")
 app.include_router(chat.router, prefix="/api/chat")
 app.include_router(auth.router, prefix="/api/auth")
