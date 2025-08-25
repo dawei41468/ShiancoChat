@@ -5,7 +5,9 @@ from backend.database import get_db
 from datetime import datetime
 
 # Initialize embedding model (same as used in documents.py)
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+import os
+model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'all-MiniLM-L6-v2')
+embedding_model = SentenceTransformer(model_path)
 
 import logging
 logger = logging.getLogger(__name__)

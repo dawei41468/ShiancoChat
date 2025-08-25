@@ -137,10 +137,19 @@ async def generate_conversation_title(
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or not owned by user")
     
-    # Placeholder for actual title generation logic
-    # In a real scenario, this would call an LLM to generate a title
-    # For now, we'll just update the title with a generic one
-    new_title = f"AI Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    # Fetch the first user message to generate a title
+    first_user_message = await db.messages.find_one(
+        {"conversation_id": conversation_id, "sender": "user"},
+        sort=[("timestamp", 1)]
+    )
+    
+    if first_user_message:
+        message_text = first_user_message.get("text", "")
+        words = message_text.split()
+        summary = " ".join(words[:5])
+        new_title = summary if len(words) <= 5 else f"{summary}..."
+    else:
+        new_title = f"AI Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     
     await db.conversations.update_one(
         {"id": conversation_id},

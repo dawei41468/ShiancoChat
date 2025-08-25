@@ -163,6 +163,24 @@ export const ChatProvider = ({ children }) => {
     setInputValue('');
     setIsTyping(true);
 
+    // If this is the first user message, update conversation title immediately
+    const currentConversation = conversations.find(c => c.id === currentConversationId);
+    const userMessages = messages.filter(m => m.sender === 'user');
+    if (userMessages.length === 0) { // This is the first user message
+      const firstMessageText = savedUserMessage.text || '';
+      const words = firstMessageText.split(/\s+/);
+      const summary = words.slice(0, 5).join(' ');
+      const newTitle = words.length > 5 ? `${summary}...` : summary;
+      
+      // Update conversation title immediately, regardless of current title
+      apiService.renameConversation(currentConversationId, newTitle)
+        .then(() => {
+          // Refresh the conversation list to show the new title
+          fetchConversations();
+        })
+        .catch(err => console.error("Error renaming conversation:", err));
+    }
+
     // --- 2. Prepare for AI Response ---
     const aiResponseId = Date.now().toString();
     const aiResponsePlaceholder = {
@@ -196,7 +214,7 @@ export const ChatProvider = ({ children }) => {
     // --- 3. Stream and Process AI Response ---
     try {
       const finalMessageState = { ...aiResponsePlaceholder };
-      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled });
+      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled, ragEnabled: true });
 
       for await (const event of iterator) {
         switch (event.event) {
@@ -232,12 +250,12 @@ export const ChatProvider = ({ children }) => {
             const processedMessage = _processAssistantMessage(savedAssistantMessage.data);
             setMessages(prev => prev.map(m => m.id === aiResponseId ? processedMessage : m));
 
-            // If the conversation title is still "New Chat", generate a new one.
+            // Do not overwrite the title if it has already been set based on the first user message
             const currentConversation = conversations.find(c => c.id === currentConversationId);
             if (currentConversation && currentConversation.title === "New Chat") {
+              // Only generate a title if no user-based title has been set
               apiService.generateConversationTitle(currentConversationId, selectedModel)
                 .then(() => {
-                  // Refresh the conversation list to show the new title
                   fetchConversations();
                 })
                 .catch(err => console.error("Error generating title:", err));

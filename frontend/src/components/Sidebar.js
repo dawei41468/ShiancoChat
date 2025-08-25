@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, memo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, Book, Settings, HelpCircle, Plus, MoreVertical, Pencil, Trash, LogOut, User
@@ -11,7 +11,7 @@ import ShiancoChatHeader from './ShiancoChatHeader';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
 
 // Conversation Actions Dropdown Component
-const ConversationActions = ({ conversationId, onRename, onDelete }) => {
+const ConversationActions = memo(({ conversationId, onRename, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef(null);
     const { t } = useLanguage();
@@ -69,7 +69,7 @@ const ConversationActions = ({ conversationId, onRename, onDelete }) => {
         )}
       </div>
     );
-};
+});
 
 const ProfileDropdown = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -199,38 +199,102 @@ const Sidebar = ({ isOpen }) => {
             <h3 className="text-sm font-semibold uppercase tracking-wider mb-3 text-text-secondary flex-shrink-0">
               {t.recentConversations || "Recent Conversations"}
             </h3>
-            <div className="flex-1 space-y-2 overflow-y-auto no-scrollbar">
-              {conversations.map((conversation) => (
-                <div
-                  key={conversation.id}
-                  className={`relative group flex items-center w-full rounded-lg transition-colors ${
-                    conversation.id === currentConversationId ? 'bg-surface-selected' : 'hover:bg-hover'
-                  }`}
-                >
-                  <button
-                    onClick={() => {
-                      if (conversation.id !== currentConversationId) {
-                        handleSelectConversation(conversation.id);
-                        navigate('/');
-                      }
-                    }}
-                    className="flex-1 flex items-start space-x-3 p-3 pr-10 text-left overflow-hidden"
+            <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
+              {(() => {
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay()); // Start of current week (Monday)
+                const startOfLastWeek = new Date(startOfWeek);
+                startOfLastWeek.setDate(startOfWeek.getDate() - 7); // Start of last week
+
+                const todayConvos = [];
+                const thisWeekConvos = [];
+                const lastWeekConvos = [];
+                const olderConvos = [];
+
+                conversations.forEach(conv => {
+                  const convDate = new Date(conv.last_updated);
+                  if (convDate >= today) {
+                    todayConvos.push(conv);
+                  } else if (convDate >= startOfWeek) {
+                    thisWeekConvos.push(conv);
+                  } else if (convDate >= startOfLastWeek) {
+                    lastWeekConvos.push(conv);
+                  } else {
+                    olderConvos.push(conv);
+                  }
+                });
+
+                const renderConversation = (conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={`relative group flex items-center w-full rounded-lg transition-colors ${
+                      conversation.id === currentConversationId ? 'bg-surface-selected' : 'hover:bg-hover'
+                    }`}
                   >
-                    <div className={`flex-1 min-w-0 no-scrollbar ${conversation.id === currentConversationId ? 'scroll-on-overflow' : 'group-hover:scroll-on-overflow'}`}>
-                      <p className={`text-sm font-medium text-text-primary ${conversation.id !== currentConversationId ? 'truncate' : ''}`}>
-                        {conversation.title}
-                      </p>
+                    <button
+                      onClick={() => {
+                        if (conversation.id !== currentConversationId) {
+                          handleSelectConversation(conversation.id);
+                          navigate('/');
+                        }
+                      }}
+                      className="flex-1 flex items-start space-x-3 p-3 pr-10 text-left overflow-hidden"
+                    >
+                      <div className={`flex-1 min-w-0 no-scrollbar ${conversation.id === currentConversationId ? 'scroll-on-overflow' : 'group-hover:scroll-on-overflow'}`}>
+                        <p className={`text-sm font-medium text-text-primary ${conversation.id !== currentConversationId ? 'truncate' : ''}`}>
+                          {conversation.title}
+                        </p>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200">
+                      <ConversationActions
+                        conversationId={conversation.id}
+                        onRename={handleRenameConversation}
+                        onDelete={handleDeleteConversation}
+                      />
                     </div>
-                  </button>
-                  <div className="absolute right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200">
-                    <ConversationActions
-                      conversationId={conversation.id}
-                      onRename={handleRenameConversation}
-                      onDelete={handleDeleteConversation}
-                    />
                   </div>
-                </div>
-              ))}
+                );
+
+                return (
+                  <>
+                    {todayConvos.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                          {t.today || "Today"}
+                        </h4>
+                        {todayConvos.map(renderConversation)}
+                      </div>
+                    )}
+                    {thisWeekConvos.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                          {t.thisWeek || "This Week"}
+                        </h4>
+                        {thisWeekConvos.map(renderConversation)}
+                      </div>
+                    )}
+                    {lastWeekConvos.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                          {t.lastWeek || "Last Week"}
+                        </h4>
+                        {lastWeekConvos.map(renderConversation)}
+                      </div>
+                    )}
+                    {olderConvos.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                          {t.older || "Older"}
+                        </h4>
+                        {olderConvos.map(renderConversation)}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
