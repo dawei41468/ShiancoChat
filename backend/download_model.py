@@ -9,7 +9,8 @@ def download_model():
     # We will save the model to backend/models/all-MiniLM-L6-v2
     model_path = os.path.join(os.path.dirname(__file__), 'models', model_name)
 
-    if not os.path.exists(model_path):
+    # Check for the existence of a key file to determine if the model is fully downloaded.
+    if not os.path.exists(os.path.join(model_path, 'model.safetensors')):
         print(f"Downloading model to {model_path}...")
         model = SentenceTransformer(model_name)
         model.save(model_path)
