@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { uploadDocument } from '@/services/apiService';
 import { useChat } from '@/ChatContext';
 
 const FileUpload = ({ onUploadComplete }) => {
   const [file, setFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { appendMessage } = useChat();
+  const { appendMessage, uploadDocument, saveDocumentRecord, currentConversationId } = useChat();
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -24,12 +23,18 @@ const FileUpload = ({ onUploadComplete }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await uploadDocument(formData);
+      const doc = await uploadDocument(file, currentConversationId);
       appendMessage({
-        text: `Uploaded document: ${response.filename}\n\n${response.content}`,
+        text: `Uploaded document: ${doc.filename}`,
         sender: 'user'
       });
-      onUploadComplete?.(response);
+      await saveDocumentRecord({
+        conversation_id: currentConversationId,
+        document_id: doc.document_id,
+        filename: doc.filename,
+        content_type: doc.content_type,
+      });
+      onUploadComplete?.(doc);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to upload file');
     } finally {

@@ -24,7 +24,6 @@ const ChatPage = ({ sidebarOpen }) => {
     messages,
     handlePromptClick,
     chatEndRef,
-    fetchConversations,
     conversations,
     currentConversationId,
     currentDocument,
@@ -59,11 +58,7 @@ const ChatPage = ({ sidebarOpen }) => {
     }
   ];
 
-  useEffect(() => {
-    if (conversations.length === 0 && !currentConversationId) {
-      fetchConversations();
-    }
-  }, [conversations, currentConversationId, fetchConversations]);
+  // Conversations are fetched and synced by ChatContext via React Query
 
   return (
     <div className="flex-1 flex flex-col bg-background">

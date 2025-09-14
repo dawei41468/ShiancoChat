@@ -1,6 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import * as apiService from '@/services/apiService';
 import { AuthContext } from './AuthContext'; // Import AuthContext
+import {
+  useConversations,
+  useMessages,
+  useAvailableModels,
+  useCreateConversation,
+  useRenameConversation,
+  useDeleteConversation,
+  useSaveMessage,
+} from '@/hooks/chatHooks';
+import { useUploadDocument, useDeleteDocument, useSaveDocumentRecord } from '@/hooks/documentHooks';
+import { useQueryClient } from '@tanstack/react-query';
+import { keys } from '@/hooks/queryKeys';
 
 const ChatContext = createContext();
 
@@ -60,65 +72,103 @@ export const ChatProvider = ({ children }) => {
     scrollToBottom();
   }, [messages]);
 
-  const fetchMessages = useCallback(async (conversationId) => {
-    if (!conversationId) {
+  // React Query: conversations, messages, models
+  const { data: rqConversations = [], refetch: refetchConversations } = useConversations({
+    enabled: !!user,
+  });
+  const { data: rqMessages = [], refetch: refetchMessages } = useMessages(currentConversationId, {
+    enabled: !!currentConversationId,
+  });
+  const { data: rqModels = [] } = useAvailableModels({
+    enabled: !!user,
+  });
+
+  // Sync React Query data into local UI state (preserve existing API & streaming behavior)
+  useEffect(() => {
+    if (user) {
+      setConversations(rqConversations);
+    } else {
+      setConversations([]);
+    }
+  }, [rqConversations, user]);
+
+  useEffect(() => {
+    if (!currentConversationId) {
       setMessages([]);
       return;
     }
-    try {
-      const response = await apiService.fetchMessagesForConversation(conversationId);
-      setMessages(response.data.map(msg =>
+    // Only sync fetched messages when not streaming
+    if (!isTyping && abortControllerRef.current == null) {
+      setMessages(rqMessages.map(msg =>
         msg.sender === 'assistant' ? _processAssistantMessage(msg) : {
           ...msg,
           timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }
       ));
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      setMessages([]);
     }
-  }, []);
+  }, [rqMessages, currentConversationId, isTyping]);
+
+  useEffect(() => {
+    setAvailableModels(rqModels);
+    if (!selectedModel && rqModels && rqModels.length > 0) {
+      setSelectedModel(prev => prev || rqModels[0]);
+    }
+  }, [rqModels, selectedModel]);
 
   const fetchConversations = useCallback(async () => {
-    if (!user) { // Only fetch conversations if a user is logged in
+    if (!user) {
       setConversations([]);
       return [];
     }
-    try {
-      const response = await apiService.fetchConversations();
-      setConversations(response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-      setConversations([]);
+    const res = await refetchConversations();
+    const data = res?.data ?? [];
+    setConversations(data);
+    return data;
+  }, [user, refetchConversations]);
+
+  // Preserve original fetchMessages API but delegate to React Query
+  const fetchMessages = useCallback(async (conversationIdParam) => {
+    const id = conversationIdParam ?? currentConversationId;
+    if (!id) {
+      setMessages([]);
       return [];
     }
-  }, [user]); // Add user to dependency array
+    const res = await refetchMessages();
+    const data = res?.data ?? [];
+    const processed = data.map(msg => (
+      msg.sender === 'assistant'
+        ? _processAssistantMessage(msg)
+        : { ...msg, timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    ));
+    setMessages(processed);
+    return processed;
+  }, [currentConversationId, refetchMessages]);
+
+  const createConversation = useCreateConversation();
+  const renameConversation = useRenameConversation();
+  const deleteConversationMutation = useDeleteConversation();
+  const saveMessageMutation = useSaveMessage();
+  const uploadDocumentMutation = useUploadDocument();
+  const deleteDocumentMutation = useDeleteDocument();
+  const saveDocumentRecordMutation = useSaveDocumentRecord();
+  const queryClient = useQueryClient();
 
   const handleNewChat = useCallback(async () => {
     if (!user) return; // Prevent creating new chat if no user
     try {
-      const response = await apiService.createNewChat("New Chat");
-      const newConversation = response.data;
+      const newConversation = await createConversation.mutateAsync("New Chat");
       await fetchConversations();
       setCurrentConversationId(newConversation.id);
       setMessages([]);
     } catch (error) {
       console.error('Error creating new chat:', error);
     }
-  }, [fetchConversations, user]); // Add user to dependency array
+  }, [fetchConversations, user, createConversation]);
 
   const fetchAvailableModels = useCallback(async () => {
-    try {
-      const response = await apiService.fetchAvailableModels();
-      setAvailableModels(response.data.models);
-      if (response.data.models.length > 0) {
-        setSelectedModel(response.data.models[0]);
-      }
-    } catch (error) {
-      console.error('Error fetching available models:', error);
-    }
-  }, []);
+    // models are already fetched via React Query and synced in effect
+    return rqModels;
+  }, [rqModels]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -138,11 +188,13 @@ export const ChatProvider = ({ children }) => {
       }
     };
     initialize();
-  }, [fetchConversations, handleNewChat, fetchAvailableModels, user]); // Add user to dependency array
+  }, [fetchConversations, handleNewChat, fetchAvailableModels, user]);
 
   useEffect(() => {
-    fetchMessages(currentConversationId);
-  }, [currentConversationId, fetchMessages]);
+    if (currentConversationId) {
+      refetchMessages();
+    }
+  }, [currentConversationId, refetchMessages]);
 
   const handleSendMessage = async (text, isWebSearchEnabled = false) => {
     if (!text || !text.trim() || !currentConversationId || !selectedModel || !user) return; // Prevent sending message if no user
@@ -245,9 +297,8 @@ export const ChatProvider = ({ children }) => {
               timestamp: new Date().toISOString(),
             };
 
-            const savedAssistantMessage = await apiService.saveMessage(messageToSave);
-            
-            const processedMessage = _processAssistantMessage(savedAssistantMessage.data);
+            const savedAssistantMessage = await saveMessageMutation.mutateAsync(messageToSave);
+            const processedMessage = _processAssistantMessage(savedAssistantMessage);
             setMessages(prev => prev.map(m => m.id === aiResponseId ? processedMessage : m));
 
             // Do not overwrite the title if it has already been set based on the first user message
@@ -312,7 +363,7 @@ export const ChatProvider = ({ children }) => {
     const newTitle = prompt("Enter new title for the conversation:");
     if (newTitle && newTitle.trim() !== "") {
       try {
-        await apiService.renameConversation(conversationId, newTitle);
+        await renameConversation.mutateAsync({ conversationId, newTitle });
         fetchConversations();
       } catch (error) {
         console.error('Error renaming conversation:', error);
@@ -324,7 +375,7 @@ export const ChatProvider = ({ children }) => {
   const handleDeleteConversation = async (conversationId) => {
     if (window.confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
       try {
-        await apiService.deleteConversation(conversationId);
+        await deleteConversationMutation.mutateAsync(conversationId);
         const remainingConversations = await fetchConversations();
 
         if (currentConversationId === conversationId) {
@@ -390,33 +441,27 @@ export const ChatProvider = ({ children }) => {
       if (conversationId) {
         formData.append('conversation_id', conversationId);
       }
-      
-      try {
-        const response = await apiService.uploadDocument(formData);
-        setDocuments(prev => [...prev, response.data]);
-        return response.data;
-      } catch (error) {
-        console.error('Error uploading document:', error);
-        throw error;
-      }
+      const doc = await uploadDocumentMutation.mutateAsync(formData);
+      setDocuments(prev => [...prev, doc]);
+      return doc;
     },
     deleteDocument: async (documentId) => {
-      try {
-        await apiService.deleteDocument(documentId);
-        setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
-      } catch (error) {
-        console.error('Error deleting document:', error);
-        throw error;
-      }
+      await deleteDocumentMutation.mutateAsync(documentId);
+      setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
     },
     fetchDocument: async (documentId) => {
-      try {
-        const response = await apiService.fetchDocument(documentId);
-        return response.data;
-      } catch (error) {
-        console.error('Error fetching document:', error);
-        throw error;
-      }
+      const data = await queryClient.fetchQuery({
+        queryKey: keys.documents.item(documentId),
+        queryFn: async () => {
+          const res = await apiService.fetchDocument(documentId);
+          return res.data;
+        },
+      });
+      return data;
+    },
+    saveDocumentRecord: async (documentData) => {
+      const saved = await saveDocumentRecordMutation.mutateAsync(documentData);
+      return saved;
     },
   };
 

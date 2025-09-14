@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { setAuthHeader, login as apiLogin, register as apiRegister, getCurrentUser } from './services/apiService';
+import { useCurrentUser } from '@/hooks/authHooks';
 
 export const AuthContext = createContext();
 
@@ -8,14 +9,21 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('access_token'));
 
+  // React Query: get current user from server state and sync into context
+  const { data: rqUser, error: rqUserError } = useCurrentUser({ enabled: !!token });
+  useEffect(() => {
+    if (rqUser) {
+      setUser(rqUser);
+    }
+  }, [rqUser]);
+
   useEffect(() => {
     const initializeAuth = async () => {
       const accessToken = localStorage.getItem('access_token');
       if (accessToken) {
         setAuthHeader(accessToken);
         try {
-          const userResponse = await getCurrentUser();
-          setUser(userResponse.data);
+          // Let React Query populate user; still attempt to validate/refresh token on mount
           setToken(accessToken);
         } catch (error) {
           // If token is invalid, try to refresh
@@ -30,8 +38,7 @@ export const AuthProvider = ({ children }) => {
               localStorage.setItem('access_token', access_token);
               setAuthHeader(access_token);
               setToken(access_token);
-              const userResponse = await getCurrentUser();
-              setUser(userResponse.data);
+              // user will be fetched by React Query after token update
             } else {
               throw error;
             }
@@ -55,8 +62,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('refresh_token', refresh_token);
     setToken(access_token);
     setAuthHeader(access_token);
-    const userResponse = await getCurrentUser();
-    setUser(userResponse.data);
+    // user will be hydrated by React Query automatically
   };
 
   const register = async (userData) => {

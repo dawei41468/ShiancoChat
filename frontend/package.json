@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@tanstack/react-query": "^5.87.4",
+    "@tanstack/react-query-devtools": "^5.87.4",
     "axios": "^1.8.4",
     "cra-template": "1.2.0",
     "eventsource-parser": "^3.0.3",

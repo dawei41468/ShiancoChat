@@ -1,9 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { uploadDocument } from '@/services/apiService';
 import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Image, Globe } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
-import * as apiService from '@/services/apiService';
 
 const AttachmentMenu = ({ onFileSelect }) => {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -77,7 +75,9 @@ const ChatInput = ({ sidebarOpen }) => {
     setIsChatInputFullScreen,
     handleStopGeneration,
     currentConversationId,
-    setMessages
+    setMessages,
+    uploadDocument,
+    saveDocumentRecord,
   } = useChat();
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(true);
   const [isRagEnabled, setIsRagEnabled] = useState(true);
@@ -104,17 +104,17 @@ const ChatInput = ({ sidebarOpen }) => {
 
       console.log('Making API call to /api/documents/upload');
       const startTime = Date.now();
-      const response = await uploadDocument(formData);
+      const response = await uploadDocument(file, currentConversationId);
       const duration = Date.now() - startTime;
       
       console.log(`Upload completed in ${duration}ms`, response);
       
       // Save document reference to backend without creating a message
-      await apiService.saveDocument({
+      await saveDocumentRecord({
         conversation_id: currentConversationId,
-        document_id: response.data.document_id,
-        filename: response.data.filename,
-        content_type: response.data.content_type
+        document_id: response.document_id,
+        filename: response.filename,
+        content_type: response.content_type
       });
     } catch (error) {
       console.error('Upload failed:', error);

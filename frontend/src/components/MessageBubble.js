@@ -1,6 +1,5 @@
 import React from 'react';
 import { useChat } from '@/ChatContext';
-import * as apiService from '@/services/apiService';
 
 const MessageBubble = ({ message, isThinking = false }) => {
   const isUser = message.sender === 'user';

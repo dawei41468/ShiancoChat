@@ -1,5 +1,5 @@
 import logging
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from typing import List
 from .base import SearchEngine
 from .models import SearchResult

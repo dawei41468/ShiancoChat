@@ -2,9 +2,9 @@ import React, { useState, useContext, useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { AuthContext } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
-import { updateUser, deleteAccount } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from './ToastNotification';
+import { useUpdateCurrentUser, useDeleteAccount } from '@/hooks/userHooks';
 
 export default function ProfileSettings() {
   const { t } = useLanguage();
@@ -13,8 +13,11 @@ export default function ProfileSettings() {
   const { showToast } = useToast();
 
   const [userName, setUserName] = useState('');
-  const { user, setUser, logout } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
   const userEmail = user ? user.email : 'N/A';
+
+  const updateCurrentUser = useUpdateCurrentUser();
+  const deleteAccountMutation = useDeleteAccount();
 
   useEffect(() => {
     if (user && user.name) {
@@ -30,8 +33,7 @@ export default function ProfileSettings() {
     console.log('Attempting to save user name:', userName);
     console.log('Authorization header before update:', localStorage.getItem('token')); // Directly check localStorage token
     try {
-      const response = await updateUser({ name: userName });
-      setUser(response.data); // Update user in AuthContext
+      await updateCurrentUser.mutateAsync({ name: userName });
       showToast(t.userNameUpdatedSuccessfully || 'User name updated successfully!', 'success');
     } catch (error) {
       console.error('Failed to update user name:', error);
@@ -42,7 +44,7 @@ export default function ProfileSettings() {
   const handleDeleteAccount = async () => {
     if (window.confirm(t.confirmDeleteAccount || 'Are you sure you want to delete your account? This action cannot be undone.')) {
       try {
-        await deleteAccount();
+        await deleteAccountMutation.mutateAsync();
         logout(); // Clear user session
         showToast(t.accountDeletedSuccessfully || 'Account deleted successfully!', 'success');
         navigate('/login'); // Redirect to login page

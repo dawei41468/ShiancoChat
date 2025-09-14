@@ -2,8 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Backgro
 from fastapi.responses import JSONResponse
 import os
 import tempfile
-import textract
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from unstructured.partition.auto import partition
 from typing import Optional
 from pydantic import BaseModel
 from pathlib import Path
@@ -95,15 +94,11 @@ async def upload_file(
             tmp_file_path = tmp_file.name
         
         # Extract text
-        text_bytes = textract.process(tmp_file_path)
-        text = text_bytes.decode('utf-8', errors='ignore').strip()
+        elements = partition(tmp_file_path)
+        text = "\n\n".join([str(el) for el in elements])
         
-        # Chunk text for better handling
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        chunks = text_splitter.split_text(text)
+        # Chunk text for better handling (simple implementation)
+        chunks = simple_text_splitter(text, chunk_size=1000, chunk_overlap=200)
         
         # Create document record
         document_id = str(uuid.uuid4())
@@ -125,10 +120,11 @@ async def upload_file(
 
         from pymongo import InsertOne
         
-        # Insert document and chunks in bulk (embeddings to be added in background)
-        operations = [
-            InsertOne(document),
-            *[
+        # Insert document and chunks
+        await db.documents.insert_one(document)
+        
+        if chunks:
+            chunk_operations = [
                 InsertOne({
                     "document_id": document_id,
                     "chunk_index": i,
@@ -137,9 +133,7 @@ async def upload_file(
                     "created_at": datetime.utcnow()
                 }) for i, chunk in enumerate(chunks)
             ]
-        ]
-        
-        await db.documents.bulk_write(operations)
+            await db.document_chunks.bulk_write(chunk_operations)
         
         # Schedule background task for embedding computation
         if background_tasks:
@@ -210,7 +204,7 @@ async def compute_embeddings(db, document_id: str, chunks: list):
         chunk_embeddings = []
         for chunk in chunks:
             try:
-                embedding = embedding_model.encode(chunk).tolist()
+                embedding = np.array(embedding_model.encode(chunk)).tolist()
                 chunk_embeddings.append(embedding)
             except Exception as e:
                 logger.error(f"Error generating embedding for chunk: {str(e)}")
@@ -229,3 +223,36 @@ async def compute_embeddings(db, document_id: str, chunks: list):
             await db.document_chunks.bulk_write(operations)
     except Exception as e:
         logger.error(f"Error in background embedding task: {str(e)}")
+
+def simple_text_splitter(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list:
+    """Simple text splitter implementation without langchain dependency"""
+    if not text:
+        return []
+    
+    # Split by paragraphs first
+    paragraphs = text.split('\n\n')
+    chunks = []
+    current_chunk = ""
+    
+    for paragraph in paragraphs:
+        # If adding this paragraph would exceed chunk size, finalize current chunk
+        if current_chunk and len(current_chunk) + len(paragraph) + 2 > chunk_size:
+            chunks.append(current_chunk.strip())
+            # Start new chunk with overlap from previous chunk
+            if chunk_overlap > 0:
+                # Take last chunk_overlap characters from previous chunk
+                overlap_start = max(0, len(current_chunk) - chunk_overlap)
+                current_chunk = current_chunk[overlap_start:] + "\n\n" + paragraph
+            else:
+                current_chunk = paragraph
+        else:
+            if current_chunk:
+                current_chunk += "\n\n" + paragraph
+            else:
+                current_chunk = paragraph
+    
+    # Add the last chunk if it's not empty
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    
+    return chunks

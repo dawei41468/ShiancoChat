@@ -163,7 +163,10 @@ const Sidebar = ({ isOpen }) => {
           </div>
           
           <button
-            onClick={handleNewChat}
+            onClick={async () => {
+              await handleNewChat();
+              navigate('/');
+            }}
             className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-gradient hover:opacity-90 rounded-lg transition-opacity text-white"
           >
             <Plus className="w-5 h-5" />

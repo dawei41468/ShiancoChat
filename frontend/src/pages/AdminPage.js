@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../components/ToastNotification';
 import { useLanguage } from '../LanguageContext';
-import { fetchUsers, updateUserRole, deleteUser } from '../services/apiService'; // Import new functions
 import { useAuth } from '../AuthContext'; // Import useAuth
+import { useUsers, useUpdateUserRole, useDeleteUser } from '@/hooks/userHooks';
 
 export default function AdminPage() {
   const { t } = useLanguage();
@@ -14,9 +14,9 @@ export default function AdminPage() {
   const { user: loggedInUser } = useAuth(); // Get loggedInUser from AuthContext
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('user-management');
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: users = [], isLoading: loading, error } = useUsers({ enabled: activeTab === 'user-management' && !!loggedInUser });
+  const updateRole = useUpdateUserRole();
+  const removeUser = useDeleteUser();
 
   useEffect(() => {
     const tabs = ['user-management', 'chat-settings', 'admin-settings'];
@@ -40,23 +40,8 @@ export default function AdminPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    const getUsers = async () => {
-      try {
-        setLoading(true);
-        const response = await fetchUsers();
-        setUsers(response.data);
-      } catch (err) {
-        setError(err);
-        console.error("Failed to fetch users:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (activeTab === 'user-management' && loggedInUser) { // Only fetch if user is authenticated
-      getUsers();
-    }
-  }, [activeTab, loggedInUser]); // Add loggedInUser to dependency array
+    // purely for tab classes management
+  }, [activeTab]);
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
@@ -64,13 +49,9 @@ export default function AdminPage() {
 
   const handleRoleChange = async (userId, newRole) => {
     try {
-      await updateUserRole(userId, newRole);
-      setUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, role: newRole } : u))
-      );
+      await updateRole.mutateAsync({ userId, newRole });
       showToast(t.roleUpdatedSuccess.replace('{role}', newRole), 'success');
     } catch (err) {
-      setError(err);
       console.error("Failed to update user role:", err);
       showToast(`Failed to update user role: ${err.message}`, 'error');
     }
@@ -79,11 +60,9 @@ export default function AdminPage() {
   const handleDeleteUser = async (userId, username) => {
     if (window.confirm(t.deleteUserConfirm.replace('{username}', username))) {
       try {
-        await deleteUser(userId);
-        setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+        await removeUser.mutateAsync(userId);
         showToast(t.userDeletedSuccess.replace('{username}', username), 'success');
       } catch (err) {
-        setError(err);
         console.error("Failed to delete user:", err);
         showToast(`Failed to delete user: ${err.message}`, 'error');
       }

@@ -7,27 +7,31 @@ python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
+slowapi==0.1.8
+starlette==0.27.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
 
 # AI/ML dependencies
 sentence-transformers==2.2.2
-numpy==1.24.3
-scipy==1.11.4
+huggingface-hub==0.22.2  # Compatible version with sentence-transformers
+numpy==1.26.4
+scipy==1.13.1
 
 # Document processing
-textract==1.6.5
-langchain==0.1.0
-langchain-openai==0.0.5
-langchain-community==0.0.13
+unstructured==0.14.9
+python-magic==0.4.27
+lxml==5.2.2
 
 # Web search
 duckduckgo-search==3.9.6
 aiohttp==3.9.1
 
-# Caching (optional)
-redis==5.0.1
 
-# Vector database (optional)
-qdrant-client==1.7.0
+# HTTP client
+httpx==0.25.2
+
+
 
 # Development
 pytest==7.4.3

@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Initialize embedding model (same as used in documents.py)
 import os
-model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'all-MiniLM-L6-v2')
+model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'all-MiniLM-L6-v2-compatible')
 embedding_model = SentenceTransformer(model_path)
 
 import logging

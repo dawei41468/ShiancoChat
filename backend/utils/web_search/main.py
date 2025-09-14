@@ -1,7 +1,7 @@
 import os
-from langchain_text_splitters import RecursiveCharacterTextSplitter  # Correct submodule
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+# from langchain_text_splitters import RecursiveCharacterTextSplitter  # Correct submodule
+# from langchain_openai import OpenAIEmbeddings
+# from langchain_community.vectorstores import FAISS
 from pydantic import SecretStr
 from typing import List, Optional
 from .models import SearchResult
@@ -99,11 +99,11 @@ async def perform_web_search(
         logger.error(f"Web search failed: {str(e)}")
         return []
 
-# Add RAG indexing function
-def index_knowledge(docs: List[str]):  # Assuming docs is a list of strings or Documents
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-    chunks = splitter.split_text('\n\n'.join(docs))  # Use split_text for list of strings
-    openai_api_key = os.getenv('OPENAI_API_KEY', '')
-    embeddings = OpenAIEmbeddings(api_key=SecretStr(openai_api_key) if openai_api_key else None)
-    vectorstore = FAISS.from_texts(chunks, embeddings)  # Use from_texts for text chunks
-    vectorstore.save_local('knowledge_index')  # Save the vector store
+# Add RAG indexing function (commented out as it requires langchain dependencies)
+# def index_knowledge(docs: List[str]):  # Assuming docs is a list of strings or Documents
+#     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+#     chunks = splitter.split_text('\n\n'.join(docs))  # Use split_text for list of strings
+#     openai_api_key = os.getenv('OPENAI_API_KEY', '')
+#     embeddings = OpenAIEmbeddings(api_key=SecretStr(openai_api_key) if openai_api_key else None)
+#     vectorstore = FAISS.from_texts(chunks, embeddings)  # Use from_texts for text chunks
+#     vectorstore.save_local('knowledge_index')  # Save the vector store
