@@ -23,6 +23,13 @@ class UserService:
                 detail="Password does not meet complexity requirements"
             )
 
+        existing_user = await db.users.find_one({"email": email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this email already exists"
+            )
+
         hashed_password = get_password_hash(password)
         user = User(
             name=name,
@@ -30,7 +37,10 @@ class UserService:
             hashed_password=hashed_password,
             department=department
         )
-        # TODO: Add database persistence
+        user_dict = user.model_dump()
+        user_dict["department"] = user.department.value
+        user_dict["role"] = user.role.value
+        await db.users.insert_one(user_dict)
         return user
 
     @staticmethod
