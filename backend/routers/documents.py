@@ -3,11 +3,12 @@ from fastapi.responses import JSONResponse
 import os
 import tempfile
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from typing import Optional
+from typing import Optional, cast
 from pydantic import BaseModel
 from pathlib import Path
 from datetime import datetime, timedelta
 from sentence_transformers import SentenceTransformer
+import numpy as np
 from backend.models import Document, DocumentChunk, User
 from backend.database import get_db
 from backend.auth import get_current_user
@@ -129,6 +130,8 @@ async def upload_file(
                 elif ext == '.txt':
                     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                         return f.read()
+                else:
+                    return ''
             except Exception:
                 # Fallthrough on any parsing error
                 return ''
@@ -258,11 +261,10 @@ async def cleanup_documents():
 async def compute_embeddings(db, document_id: str, chunks: list):
     """Background task to compute and update chunk embeddings"""
     try:
-        # With sentence-transformers v3+, encode returns a tensor. Convert to numpy then list.
-        # Encode all chunks in a single batch for efficiency.
-        embeddings_tensor = embedding_model.encode(chunks, convert_to_tensor=True)
-        # The result is a 2D array, so we convert it to a list of 1D lists.
-        chunk_embeddings = embeddings_tensor.cpu().numpy().tolist()
+        # Encode all chunks in a single batch for efficiency, returning numpy array.
+        embeddings = cast(np.ndarray, embedding_model.encode(chunks, convert_to_tensor=False))
+        # The result is a 2D numpy array, convert to list of 1D lists.
+        chunk_embeddings = embeddings.tolist()
         
         # Update chunks with embeddings
         from pymongo import UpdateOne
