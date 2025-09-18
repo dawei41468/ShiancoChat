@@ -18,6 +18,8 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 # Load environment variables *before* other imports - quietly without logging
 load_dotenv(ROOT_DIR / 'backend' / '.env', verbose=False)
@@ -30,7 +32,7 @@ if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('WERKZEUG_RUN_MAIN
     from backend.database import close_mongo_connection
 else:
     from backend.database import close_mongo_connection
-from routers import chat, openai, auth, users, documents
+from backend.routers import chat, openai, auth, users, documents
 logger.info(f"Imported routers: {[r.__name__ for r in [chat, openai, auth, users, documents]]}")
 
 # Get port from environment variable, default to 4100 if not set
@@ -46,6 +48,8 @@ async def lifespan(app: FastAPI):
 # Create the main app without a prefix
 app = FastAPI(lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")

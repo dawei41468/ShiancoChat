@@ -2,7 +2,8 @@ from typing import Optional, Tuple
 from datetime import datetime
 from fastapi import HTTPException, status
 from pydantic import EmailStr
-from backend.models import User, Department, RefreshToken
+from backend.models import User, RefreshToken
+from backend.localization.departments import Department
 from backend.services.auth.password import PasswordValidator
 from backend.services.auth.tokens import get_password_hash
 from backend.config import config
@@ -22,6 +23,13 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Password does not meet complexity requirements"
             )
+        # Check for duplicate email
+        existing = await db.users.find_one({"email": email})
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
 
         hashed_password = get_password_hash(password)
         user = User(
@@ -30,7 +38,7 @@ class UserService:
             hashed_password=hashed_password,
             department=department
         )
-        # TODO: Add database persistence
+        await db.users.insert_one(user.dict())
         return user
 
     @staticmethod
@@ -40,7 +48,7 @@ class UserService:
             {"email": email},
             {"$set": update_data}
         )
-        if result.modified_count == 0:
+        if result.matched_count == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"

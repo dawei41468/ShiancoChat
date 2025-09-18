@@ -11,7 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from backend.auth import get_current_user
 from fastapi import Body
-from backend.models import User, UserCreate, Token, UserUpdate
+from backend.models import User, UserCreate, Token, UserUpdate, UserPublic
 from backend.config import config as settings
 from pydantic import BaseModel
 
@@ -22,16 +22,18 @@ class RefreshToken(BaseModel):
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 
-@router.post("/register", response_model=User)
+@router.post("/register", response_model=UserPublic)
 @limiter.limit("5/minute")
 async def register(request: Request, form_data: UserCreate):
     try:
-        return await UserService.register_user(
+        user = await UserService.register_user(
             name=form_data.name,
             email=form_data.email,
             password=form_data.password,
             department=form_data.department
         )
+        # Return public view
+        return UserPublic(**user.dict(exclude={"hashed_password"}))
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -81,11 +83,11 @@ async def refresh_access_token(request: Request, refresh: RefreshToken = Body(..
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.get("/users/me", response_model=User)
+@router.get("/users/me", response_model=UserPublic)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-   return current_user
+   return UserPublic(**current_user.dict(exclude={"hashed_password"}))
 
-@router.patch("/users/me", response_model=User)
+@router.patch("/users/me", response_model=UserPublic)
 async def update_user_me(user_update: UserUpdate, current_user: User = Depends(get_current_user)):
     # Convert current_user to a dictionary, update fields, then convert back to User model
     user_data = current_user.dict()
@@ -98,9 +100,7 @@ async def update_user_me(user_update: UserUpdate, current_user: User = Depends(g
     
     # Update and return updated user
     updated_user = await UserService.update_user(current_user.email, update_data)
-    return updated_user
-    
-    return updated_user
+    return UserPublic(**updated_user.dict(exclude={"hashed_password"}))
 
 @router.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_me(current_user: User = Depends(get_current_user)):

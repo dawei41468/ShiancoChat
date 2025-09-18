@@ -71,7 +71,10 @@ async def save_message(
         sender=message_data.sender,
         text=message_data.text,
         timestamp=message_data.timestamp or datetime.now(timezone.utc),
-        thinking_duration=message_data.thinking_duration
+        thinking_duration=message_data.thinking_duration,
+        citations=message_data.citations,
+        web_search_state=message_data.web_search_state,
+        rag_state=message_data.rag_state,
     )
     
     await db.messages.insert_one(new_message.dict())

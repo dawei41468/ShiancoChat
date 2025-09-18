@@ -10,6 +10,36 @@ async function* parseStreamByTags(textStream) {
         let i = 0;
         while (i < buffer.length) {
             if (state === 'seeking') {
+                // Status tags for web search and RAG
+                if (buffer.startsWith('<websearch>', i)) {
+                    const end = buffer.indexOf('</websearch>', i);
+                    if (end === -1) break; // wait for more data
+                    const val = buffer.substring(i + '<websearch>'.length, end);
+                    yield { event: 'status.websearch', data: { value: val } };
+                    i = end + '</websearch>'.length;
+                    continue;
+                }
+                if (buffer.startsWith('<rag>', i)) {
+                    const end = buffer.indexOf('</rag>', i);
+                    if (end === -1) break; // wait for more data
+                    const val = buffer.substring(i + '<rag>'.length, end);
+                    yield { event: 'status.rag', data: { value: val } };
+                    i = end + '</rag>'.length;
+                    continue;
+                }
+                if (buffer.startsWith('<citations>', i)) {
+                    const end = buffer.indexOf('</citations>', i);
+                    if (end === -1) break; // wait for more data
+                    const raw = buffer.substring(i + '<citations>'.length, end);
+                    try {
+                        const parsed = JSON.parse(raw);
+                        yield { event: 'citations', data: parsed };
+                    } catch (e) {
+                        yield { event: 'citations', data: { raw } };
+                    }
+                    i = end + '</citations>'.length;
+                    continue;
+                }
                 if (buffer.startsWith('<think>', i)) {
                     state = 'in_think';
                     i += '<think>'.length;
@@ -59,7 +89,10 @@ async function* openAIStreamToText(sseReader) {
                 yield content;
             }
         } catch (e) {
-            // Ignore parsing errors
+            // Fallback: yield raw data so the caller can surface messages (e.g., backend errors)
+            if (typeof data === 'string' && data.length > 0) {
+                yield data;
+            }
         }
     }
 }

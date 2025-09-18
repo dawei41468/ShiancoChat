@@ -1,8 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Form
 from fastapi.responses import JSONResponse
 import os
 import tempfile
-import textract
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from typing import Optional
 from pydantic import BaseModel
@@ -13,10 +12,15 @@ from backend.models import Document, DocumentChunk, User
 from backend.database import get_db
 from backend.auth import get_current_user
 import uuid
-import numpy as np
 
 # Initialize embedding model
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'all-MiniLM-L6-v2')
+embedding_model = SentenceTransformer(model_path)
+
+# Python 3.12-friendly document extractors
+from pypdf import PdfReader
+from docx import Document as DocxDocument
+from openpyxl import load_workbook
 
 import logging
 logger = logging.getLogger(__name__)
@@ -72,7 +76,7 @@ async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    conversation_id: Optional[str] = None
+    conversation_id: Optional[str] = Form(None)
 ):
     """Handle file upload and text extraction"""
     tmp_file_path = None  # Initialize before try block
@@ -82,7 +86,7 @@ async def upload_file(
     
     filepath = Path(file.filename)
     ext = filepath.suffix.lower()
-    if ext not in ['.pdf', '.doc', '.docx', '.txt', '.xlsx', '.jpg']:
+    if ext not in ['.pdf', '.docx', '.txt', '.xlsx']:
         raise HTTPException(status_code=400, detail="Unsupported file type")
     
     try:
@@ -94,9 +98,44 @@ async def upload_file(
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
         
-        # Extract text
-        text_bytes = textract.process(tmp_file_path)
-        text = text_bytes.decode('utf-8', errors='ignore').strip()
+        # Extract text using Python 3.12-compatible libraries
+        def extract_text_from_file(path: str, ext: str) -> str:
+            try:
+                if ext == '.pdf':
+                    text_parts = []
+                    reader = PdfReader(path)
+                    for page in reader.pages:
+                        page_text = page.extract_text() or ''
+                        if page_text:
+                            text_parts.append(page_text)
+                    return '\n'.join(text_parts)
+                elif ext == '.docx':
+                    doc = DocxDocument(path)
+                    paras = [p.text for p in doc.paragraphs if p.text]
+                    # Extract text from tables as well
+                    for table in getattr(doc, 'tables', []):
+                        for row in table.rows:
+                            paras.append('\t'.join(cell.text for cell in row.cells))
+                    return '\n'.join(paras)
+                elif ext == '.xlsx':
+                    wb = load_workbook(path, data_only=True)
+                    lines = []
+                    for ws in wb.worksheets:
+                        for row in ws.iter_rows(values_only=True):
+                            str_vals = [str(v) for v in row if isinstance(v, (str, int, float)) and v is not None]
+                            if str_vals:
+                                lines.append('\t'.join(str_vals))
+                    return '\n'.join(lines)
+                elif ext == '.txt':
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        return f.read()
+            except Exception:
+                # Fallthrough on any parsing error
+                return ''
+
+        text = extract_text_from_file(tmp_file_path, ext)
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from the uploaded file.")
         
         # Chunk text for better handling
         text_splitter = RecursiveCharacterTextSplitter(
@@ -123,23 +162,18 @@ async def upload_file(
             "chunk_count": len(chunks)
         }
 
-        from pymongo import InsertOne
-        
-        # Insert document and chunks in bulk (embeddings to be added in background)
-        operations = [
-            InsertOne(document),
-            *[
-                InsertOne({
+        # Insert document and then chunks (embeddings to be added in background)
+        await db.documents.insert_one(document)
+        if chunks:
+            await db.document_chunks.insert_many([
+                {
                     "document_id": document_id,
                     "chunk_index": i,
                     "content": chunk,
-                    "embedding": None,  # Placeholder
+                    "embedding": None,
                     "created_at": datetime.utcnow()
-                }) for i, chunk in enumerate(chunks)
-            ]
-        ]
-        
-        await db.documents.bulk_write(operations)
+                } for i, chunk in enumerate(chunks)
+            ])
         
         # Schedule background task for embedding computation
         if background_tasks:
@@ -170,13 +204,30 @@ async def upload_file(
             detail=f"Error processing file: {str(e)}"
         )
 
+@router.get("/{document_id}", response_model=DocumentResponse)
+async def get_document(document_id: str, current_user: User = Depends(get_current_user)):
+    """Fetch a document by ID for the current user"""
+    db = await get_db()
+    doc = await db.documents.find_one({"_id": document_id, "user_email": current_user.email})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return DocumentResponse(
+        filename=doc.get("filename", ""),
+        content=doc.get("content", ""),
+        content_type=doc.get("content_type", "application/octet-stream"),
+        document_id=doc.get("_id"),
+        expires_at=doc.get("expires_at")
+    )
+
 @router.delete("/{document_id}")
-async def delete_document(document_id: str):
+async def delete_document(document_id: str, current_user: User = Depends(get_current_user)):
     """Delete a document by ID"""
     db = await get_db()
     # Delete document and its chunks
-    result = await db.documents.delete_one({"_id": document_id})
-    await db.document_chunks.delete_many({"document_id": document_id})
+    result = await db.documents.delete_one({"_id": document_id, "user_email": current_user.email})
+    # Only delete chunks if the document delete actually occurred
+    if result.deleted_count:
+        await db.document_chunks.delete_many({"document_id": document_id})
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -207,14 +258,11 @@ async def cleanup_documents():
 async def compute_embeddings(db, document_id: str, chunks: list):
     """Background task to compute and update chunk embeddings"""
     try:
-        chunk_embeddings = []
-        for chunk in chunks:
-            try:
-                embedding = embedding_model.encode(chunk).tolist()
-                chunk_embeddings.append(embedding)
-            except Exception as e:
-                logger.error(f"Error generating embedding for chunk: {str(e)}")
-                chunk_embeddings.append(None)
+        # With sentence-transformers v3+, encode returns a tensor. Convert to numpy then list.
+        # Encode all chunks in a single batch for efficiency.
+        embeddings_tensor = embedding_model.encode(chunks, convert_to_tensor=True)
+        # The result is a 2D array, so we convert it to a list of 1D lists.
+        chunk_embeddings = embeddings_tensor.cpu().numpy().tolist()
         
         # Update chunks with embeddings
         from pymongo import UpdateOne

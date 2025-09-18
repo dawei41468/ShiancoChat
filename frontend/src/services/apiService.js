@@ -155,6 +155,10 @@ export const fetchAvailableModels = () => {
   return apiClient.get('/api/llm/models');
 };
 
+export const fetchLLMConfig = () => {
+  return apiClient.get('/api/openai/config');
+};
+
 export const streamChatResponse = (payload, { signal, webSearchEnabled, ragEnabled }) => {
     const url = `${BACKEND_URL}/api/openai/chat`;
     

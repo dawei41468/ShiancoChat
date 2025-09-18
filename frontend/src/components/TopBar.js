@@ -1,11 +1,14 @@
-import React from 'react';
-import { Menu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Menu, Settings } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
+import SettingsSheet from '@/components/SettingsSheet';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { t } = useLanguage();
   const { availableModels, selectedModel, handleModelChange } = useChat();
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4">
@@ -32,8 +35,19 @@ const TopBar = ({ onToggleSidebar }) => {
           </select>
         </div>
       </div>
+      <div>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-2 rounded-md hover:bg-hover text-text-primary"
+          aria-label={t.settings || 'Settings'}
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      </div>
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
-};
+}
+;
 
 export default TopBar;

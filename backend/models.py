@@ -24,6 +24,16 @@ class User(BaseModel):
        from backend.localization.departments import get_department_name
        return get_department_name(self.department, self.language)
 
+class UserPublic(BaseModel):
+   """Public-facing user model without sensitive fields."""
+   id: str
+   name: str
+   email: str
+   department: Department
+   role: UserRole = UserRole.USER
+   created_at: datetime
+   language: str = "zh"
+
 class UserCreate(BaseModel):
    name: str
    email: str
@@ -58,6 +68,9 @@ class Message(BaseModel):
     text: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     thinking_duration: Optional[float] = None
+    citations: Optional[List[dict]] = None
+    web_search_state: Optional[str] = None
+    rag_state: Optional[str] = None
 
 class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -79,6 +92,9 @@ class MessageSavePayload(BaseModel):
     text: str
     timestamp: Optional[datetime] = None
     thinking_duration: Optional[float] = None
+    citations: Optional[List[dict]] = None
+    web_search_state: Optional[str] = None
+    rag_state: Optional[str] = None
 
 # Payload for INITIATING a stream from the frontend
 class StreamRequestPayload(BaseModel):
@@ -87,6 +103,7 @@ class StreamRequestPayload(BaseModel):
     model: str # Model is required to know which LLM to call
     web_search_enabled: Optional[bool] = False
     rag_enabled: Optional[bool] = False
+    token: Optional[str] = None
 class TitleGenerationRequest(BaseModel):
     model: str
 

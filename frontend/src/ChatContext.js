@@ -25,6 +25,11 @@ const _processAssistantMessage = (msg) => {
     answerContent = msg.text;
   }
 
+  // Map persisted snake_case fields to camelCase for UI
+  const webSearchState = msg.webSearchState || msg.web_search_state;
+  const ragState = msg.ragState || msg.rag_state;
+  const citations = Array.isArray(msg.citations) ? msg.citations : [];
+
   return {
     ...msg,
     timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -32,6 +37,9 @@ const _processAssistantMessage = (msg) => {
     answer: answerContent,
     isThinkingComplete: true,
     thinkingDuration: msg.thinking_duration || 0,
+    webSearchState,
+    ragState,
+    citations,
   };
 };
 
@@ -47,6 +55,7 @@ export const ChatProvider = ({ children }) => {
   const [isChatInputFullScreen, setIsChatInputFullScreen] = useState(false);
   const chatEndRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const lastMessageCountRef = useRef(0);
   const [availableModels, setAvailableModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -57,7 +66,11 @@ export const ChatProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    scrollToBottom();
+    // Only auto-scroll when a new message is appended (not when streaming updates content)
+    if (messages.length > lastMessageCountRef.current) {
+      scrollToBottom();
+    }
+    lastMessageCountRef.current = messages.length;
   }, [messages]);
 
   const fetchMessages = useCallback(async (conversationId) => {
@@ -144,7 +157,7 @@ export const ChatProvider = ({ children }) => {
     fetchMessages(currentConversationId);
   }, [currentConversationId, fetchMessages]);
 
-  const handleSendMessage = async (text, isWebSearchEnabled = false) => {
+  const handleSendMessage = async (text, isWebSearchEnabled = false, isRagEnabled = true) => {
     if (!text || !text.trim() || !currentConversationId || !selectedModel || !user) return; // Prevent sending message if no user
 
     // --- 1. Save User Message ---
@@ -192,6 +205,9 @@ export const ChatProvider = ({ children }) => {
       isThinkingComplete: false,
       thinkingStartTime: Date.now(),
       thinkingDuration: 0,
+      webSearchState: undefined,
+      ragState: undefined,
+      isPreparing: true,
       timestamp: new Date().toISOString() // Use ISO for consistency, format on display
     };
     setMessages(prev => [...prev, aiResponsePlaceholder]);
@@ -214,15 +230,25 @@ export const ChatProvider = ({ children }) => {
     // --- 3. Stream and Process AI Response ---
     try {
       const finalMessageState = { ...aiResponsePlaceholder };
-      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled, ragEnabled: true });
+      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled, ragEnabled: isRagEnabled });
 
       for await (const event of iterator) {
         switch (event.event) {
           case 'thread.run.step.in_progress':
+            // First sign of model thinking; stop showing pre-processing indicator
+            if (finalMessageState.isPreparing) {
+              finalMessageState.isPreparing = false;
+              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
+            }
             finalMessageState.thinking += event.data.details;
             updateAIResponse(msg => ({ ...msg, thinking: finalMessageState.thinking }));
             break;
           case 'thread.message.delta':
+            // If no thinking phase, the first token removes pre-processing indicator
+            if (finalMessageState.isPreparing) {
+              finalMessageState.isPreparing = false;
+              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
+            }
             if (finalMessageState.thinking && !finalMessageState.isThinkingComplete) {
               finalMessageState.isThinkingComplete = true;
               finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
@@ -230,7 +256,34 @@ export const ChatProvider = ({ children }) => {
             finalMessageState.answer += event.data.content;
             updateAIResponse(msg => ({ ...msg, answer: finalMessageState.answer, isThinkingComplete: finalMessageState.isThinkingComplete, thinkingDuration: finalMessageState.thinkingDuration }));
             break;
+          case 'status.websearch': {
+            const val = event.data?.value;
+            // If backend signals 'false' after emitting 'results' or 'no_results', keep the final state persistent
+            if (val === 'false' && (finalMessageState.webSearchState === 'results' || finalMessageState.webSearchState === 'no_results')) {
+              break;
+            }
+            finalMessageState.webSearchState = val;
+            updateAIResponse(msg => ({ ...msg, webSearchState: finalMessageState.webSearchState }));
+            break;
+          }
+          case 'status.rag': {
+            const val = event.data?.value;
+            if (val === 'false' && (finalMessageState.ragState === 'results' || finalMessageState.ragState === 'no_results')) {
+              break;
+            }
+            finalMessageState.ragState = val;
+            updateAIResponse(msg => ({ ...msg, ragState: finalMessageState.ragState }));
+            break;
+          }
+          case 'citations':
+            finalMessageState.citations = event.data?.items || [];
+            updateAIResponse(msg => ({ ...msg, citations: finalMessageState.citations }));
+            break;
           case 'thread.run.completed':
+            if (finalMessageState.isPreparing) {
+              finalMessageState.isPreparing = false;
+              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
+            }
             if (!finalMessageState.isThinkingComplete) {
               finalMessageState.isThinkingComplete = true;
               finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
@@ -243,12 +296,24 @@ export const ChatProvider = ({ children }) => {
               text: `<think>${finalMessageState.thinking}</think><answer>${finalMessageState.answer}</answer>`,
               thinking_duration: finalMessageState.thinkingDuration,
               timestamp: new Date().toISOString(),
+              // Persist citations and states for history
+              citations: finalMessageState.citations || [],
+              web_search_state: finalMessageState.webSearchState === 'false' ? undefined : finalMessageState.webSearchState,
+              rag_state: finalMessageState.ragState,
             };
 
             const savedAssistantMessage = await apiService.saveMessage(messageToSave);
             
             const processedMessage = _processAssistantMessage(savedAssistantMessage.data);
-            setMessages(prev => prev.map(m => m.id === aiResponseId ? processedMessage : m));
+            // Preserve citations and web/rag states in the final rendered message
+            const mergedMessage = {
+              ...processedMessage,
+              citations: finalMessageState.citations || [],
+              webSearchState: finalMessageState.webSearchState === 'false' ? undefined : finalMessageState.webSearchState,
+              ragState: finalMessageState.ragState,
+              isPreparing: false,
+            };
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? mergedMessage : m));
 
             // Do not overwrite the title if it has already been set based on the first user message
             const currentConversation = conversations.find(c => c.id === currentConversationId);

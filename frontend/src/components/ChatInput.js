@@ -84,6 +84,14 @@ const ChatInput = ({ sidebarOpen }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Initialize defaults from localStorage
+  useEffect(() => {
+    const w = localStorage.getItem('default_web_search');
+    const r = localStorage.getItem('default_rag');
+    if (w !== null) setIsWebSearchEnabled(w === 'true');
+    if (r !== null) setIsRagEnabled(r === 'true');
+  }, []);
+
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
     if (!file || !currentConversationId) {

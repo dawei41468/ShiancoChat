@@ -3,14 +3,15 @@ from typing import List
 from motor.motor_asyncio import AsyncIOMotorDatabase # Import the correct type hint
 
 from backend.database import get_db, delete_user
-from backend.models import User, UserRole, UserRoleUpdate # Import UserRoleUpdate
+from backend.models import User, UserRole, UserRoleUpdate, UserPublic # Import UserRoleUpdate
 from backend.auth import get_current_user
+from pymongo import ReturnDocument
 
 router = APIRouter(
     tags=["users"],
 )
 
-@router.get("", response_model=List[User])
+@router.get("", response_model=List[UserPublic])
 async def get_all_users(db: AsyncIOMotorDatabase = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
@@ -18,10 +19,10 @@ async def get_all_users(db: AsyncIOMotorDatabase = Depends(get_db), current_user
             detail="Not authorized to access user data"
         )
     users_data = await db.users.find().to_list(length=None)
-    users = [User(**user_data) for user_data in users_data]
+    users = [UserPublic(**User(**user_data).dict(exclude={"hashed_password"})) for user_data in users_data]
     return users
 
-@router.patch("/{user_id}/role", response_model=User)
+@router.patch("/{user_id}/role", response_model=UserPublic)
 async def update_user_role(
     user_id: str,
     role_update: UserRoleUpdate,
@@ -48,9 +49,9 @@ async def update_user_role(
     updated_user_data = await db.users.find_one_and_update(
         {"id": user_id},
         {"$set": {"role": role_update.role}},
-        return_document=True
+        return_document=ReturnDocument.AFTER
     )
-    return User(**updated_user_data)
+    return UserPublic(**User(**updated_user_data).dict(exclude={"hashed_password"}))
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_endpoint(

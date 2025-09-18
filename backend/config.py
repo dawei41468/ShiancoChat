@@ -64,8 +64,17 @@ class AppConfig(BaseSettings):
     llm_base_url: Optional[str] = Field(
         default=None,
         min_length=1,
-        description="Required base URL for LLM API"
+        description="Base URL for primary LLM API (OpenAI-compatible)"
     )
+    llm_base_urls: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of LLM base URLs (comma-separated in env) for failover"
+    )
+    llm_request_timeout_seconds: int = Field(default=60)
+    llm_max_retries: int = Field(default=2)
+    llm_retry_backoff_seconds: float = Field(default=0.75)
+    http_proxy: Optional[str] = Field(default=None)
+    https_proxy: Optional[str] = Field(default=None)
     
     # Path configurations
     base_dir: Path = Field(default_factory=lambda: Path(__file__).resolve().parent.parent)
@@ -85,8 +94,9 @@ class AppConfig(BaseSettings):
             raise ValueError("mongo_url is required")
         if not self.db_name:
             raise ValueError("db_name is required")
-        if not self.llm_base_url:
-            raise ValueError("llm_base_url is required")
+        # Allow either a single LLM base URL or a list of URLs for failover
+        if not (self.llm_base_url or (self.llm_base_urls and len(self.llm_base_urls) > 0)):
+            raise ValueError("At least one LLM base URL is required. Set LLM_BASE_URL or LLM_BASE_URLS in .env")
 
 def load_config() -> AppConfig:
     """Initialize and return the application configuration"""
@@ -98,10 +108,17 @@ def load_config() -> AppConfig:
     # Log environment variables
     import os
     print("Environment variables:")
-    for var in ['PORT', 'SECRET_KEY', 'MONGO_URL', 'DB_NAME', 'LLM_BASE_URL']:
+    for var in [
+        'PORT', 'SECRET_KEY', 'MONGO_URL', 'DB_NAME',
+        'LLM_BASE_URL', 'LLM_BASE_URLS',
+        'LLM_REQUEST_TIMEOUT_SECONDS', 'LLM_MAX_RETRIES', 'LLM_RETRY_BACKOFF_SECONDS',
+        'HTTP_PROXY', 'HTTPS_PROXY'
+    ]:
         value = os.getenv(var)
         if var == 'SECRET_KEY' and value:
             value = '******'  # Mask secret key
+        if var in ('HTTP_PROXY', 'HTTPS_PROXY') and value:
+            value = 'Set'  # Avoid printing proxy URL or credentials
         print(f"{var}: {value if value else 'Not set'}")
     
     try:

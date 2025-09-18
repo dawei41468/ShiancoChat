@@ -9,7 +9,8 @@ export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [department, setDepartment] = useState('高层管理');
+  // Department enum values expected by backend
+  const [department, setDepartment] = useState('senior_management');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { register } = useContext(AuthContext);
@@ -107,13 +108,13 @@ export default function RegisterPage() {
               required
               className="w-full px-3 py-2 mt-1 border rounded-md bg-input border-border focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <option>高层管理</option>
-              <option>总经办</option>
-              <option>锡山家居</option>
-              <option>咖咖时光</option>
-              <option>Agio 业务</option>
-              <option>Agio 研发</option>
-              <option>生产事业部</option>
+              <option value="senior_management">高层管理</option>
+              <option value="general_office">总经办</option>
+              <option value="xishan_home">锡山家居</option>
+              <option value="kaka_time">咖咖时光</option>
+              <option value="agio_business">Agio 业务</option>
+              <option value="agio_rd">Agio 研发</option>
+              <option value="production_dept">生产事业部</option>
             </select>
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
