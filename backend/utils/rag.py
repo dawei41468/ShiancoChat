@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded embedding model
 _embedding_model = None
 _embedding_model_name = None
+_embedding_model_error = None
 
 def _get_embedding_model():
-    global _embedding_model, _embedding_model_name
+    global _embedding_model, _embedding_model_name, _embedding_model_error
+    if _embedding_model_error is not None:
+        raise _embedding_model_error
     if _embedding_model is None:
         from sentence_transformers import SentenceTransformer
         import os
@@ -30,9 +33,14 @@ def _get_embedding_model():
                 model_path = config.embedding_model_name
 
         logger.info(f"Loading embedding model: {model_path}")
-        _embedding_model = SentenceTransformer(model_path)
-        _embedding_model_name = config.embedding_model_name
-        logger.info(f"Embedding model loaded: {_embedding_model_name}")
+        try:
+            _embedding_model = SentenceTransformer(model_path)
+            _embedding_model_name = config.embedding_model_name
+            logger.info(f"Embedding model loaded: {_embedding_model_name}")
+        except Exception as e:
+            _embedding_model_error = e
+            logger.error(f"Failed to load embedding model: {e}")
+            raise
     return _embedding_model
 
 

@@ -123,18 +123,21 @@ async def chat_with_openai(
 
     if payload["messages"]:
         user_query = payload["messages"][-1]["content"]
-        if input.web_search_enabled: # If the user has enabled the toggle, always perform a web search
-            perform_search = True
-            logger.info(f"Web search explicitly enabled by user for query: '{user_query}'")
-        else:  # If not manually enabled, check if we should enable it automatically
-            if should_use_web_search(user_query):
-                web_search_tool = await get_tool_config(db, "web_search")
-                if user_can_use_tool(web_search_tool, current_user):
-                    web_search_allowed = True
-                    perform_search = True
-                    logger.info(f"Autonomously enabling web search for query: '{user_query}'")
-                else:
-                    logger.info("Autonomous web search skipped by tool policy")
+        query_wants_search = should_use_web_search(user_query)
+        if input.web_search_enabled:
+            if query_wants_search:
+                perform_search = True
+                logger.info(f"Web search explicitly enabled by user for query: '{user_query}'")
+            else:
+                logger.info(f"Web search toggle on but query is conversational; skipping search for: '{user_query}'")
+        elif query_wants_search:
+            web_search_tool = await get_tool_config(db, "web_search")
+            if user_can_use_tool(web_search_tool, current_user):
+                web_search_allowed = True
+                perform_search = True
+                logger.info(f"Autonomously enabling web search for query: '{user_query}'")
+            else:
+                logger.info("Autonomous web search skipped by tool policy")
     else:
         logger.warning("No messages found in payload, skipping web search and RAG processing")
 

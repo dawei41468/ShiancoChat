@@ -26,9 +26,10 @@ class DuckDuckGoEngine(SearchEngine):
                     proxies["https://"] = https_proxy
 
             # Try multiple DDG backends to mitigate persistent 202 responses on the API backend
-            backends_to_try = ["api", "html", "lite"]
+            # Limit to api+lite for speed; html backend is slower and often blocked
+            backends_to_try = ["api", "lite"]
 
-            with DDGS(timeout=timeout, proxies=proxies) as ddgs:
+            with DDGS(timeout=min(timeout, 5), proxies=proxies) as ddgs:
                 for backend in backends_to_try:
                     try:
                         # ddgs.text returns a generator in 3.9.x; slice it to max_results

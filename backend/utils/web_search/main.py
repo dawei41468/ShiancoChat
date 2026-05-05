@@ -82,13 +82,13 @@ async def perform_web_search(
             selected_engines = ["duckduckgo"]
         logger.info(f"Web search engines selected: {selected_engines}")
 
-        async def _run_with_retry(engine_name: str, tries: int = 2) -> List[SearchResult]:
+        async def _run_with_retry(engine_name: str, tries: int = 1) -> List[SearchResult]:
             delay = 0.5
             for attempt in range(tries):
                 try:
-                    return await engine_map[engine_name].search(query, max_results + 2, timeout=10)
+                    return await engine_map[engine_name].search(query, max_results + 2, timeout=5)
                 except Exception as e:
-                    logger.error(f"Engine {engine_name} attempt {attempt+1}/{tries} failed: {e}")
+                    logger.warning(f"Engine {engine_name} attempt {attempt+1}/{tries} failed: {e}")
                     if attempt < tries - 1:
                         await asyncio.sleep(delay)
                         delay *= 2
