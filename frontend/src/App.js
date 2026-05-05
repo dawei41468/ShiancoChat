@@ -68,11 +68,20 @@ function App() {
 /**
  * Route wrapper that redirects unauthenticated users to /login.
  * Renders the main app shell (Sidebar + TopBar + content) for authenticated users.
+ * Waits for auth initialization to avoid flashing the login screen on refresh.
  * @returns {JSX.Element}
  */
 const ProtectedRoute = () => {
-  const { token } = useContext(AuthContext);
+  const { token, isLoading } = useContext(AuthContext);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-text-primary">
+        <div className="animate-pulse text-sm text-text-secondary">Loading...</div>
+      </div>
+    );
+  }
 
   if (!token) {
     return <Navigate to="/login" replace />;
