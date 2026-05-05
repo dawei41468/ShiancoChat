@@ -1,493 +1,268 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { AuthContext } from './AuthContext';
+import { useToast } from '@/components/ToastNotification';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { MODEL_POLICIES, chooseModelForPolicy, normalizePolicy } from './utils/modelPolicy';
+import { DEFAULT_WORKFLOW_ID, WORKFLOWS, getWorkflowById } from './utils/workflows';
+import { useConversations } from './hooks/useConversations';
+import { useMessages } from './hooks/useMessages';
+import { useKnowledgeSpaces } from './hooks/useKnowledgeSpaces';
 import * as apiService from '@/services/apiService';
-import { AuthContext } from './AuthContext'; // Import AuthContext
 
 const ChatContext = createContext();
 
-// Helper function to process raw assistant messages into a displayable format
-const _processAssistantMessage = (msg) => {
-  let thinkingContent = '';
-  let answerContent = '';
-
-  if (msg.sender === 'assistant' && msg.text) {
-    const thinkMatch = msg.text.match(/<think>((?:.|\n)*?)<\/think>/);
-    const answerMatch = msg.text.match(/<answer>((?:.|\n)*?)<\/answer>/);
-
-    thinkingContent = thinkMatch ? thinkMatch[1] : '';
-    
-    if (answerMatch) {
-      answerContent = answerMatch[1];
-    } else {
-      // If no explicit answer tag, assume all non-thinking text is the answer
-      answerContent = msg.text.replace(/<think>.*<\/think>/s, '').trim();
-    }
-  } else {
-    answerContent = msg.text;
-  }
-
-  // Map persisted snake_case fields to camelCase for UI
-  const webSearchState = msg.webSearchState || msg.web_search_state;
-  const ragState = msg.ragState || msg.rag_state;
-  const citations = Array.isArray(msg.citations) ? msg.citations : [];
-
-  return {
-    ...msg,
-    timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    thinking: thinkingContent,
-    answer: answerContent,
-    isThinkingComplete: true,
-    thinkingDuration: msg.thinking_duration || 0,
-    webSearchState,
-    ragState,
-    citations,
-  };
-};
-
-
 export const ChatProvider = ({ children }) => {
-  const { user } = useContext(AuthContext); // Get user from AuthContext
-  const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [conversations, setConversations] = useState([]);
-  const [currentConversationId, setCurrentConversationId] = useState(null);
-  const [creatingNewChat, setCreatingNewChat] = useState(false);
+  const { user } = useContext(AuthContext);
+  const { showToast } = useToast();
   const [isChatInputFullScreen, setIsChatInputFullScreen] = useState(false);
-  const chatEndRef = useRef(null);
-  const abortControllerRef = useRef(null);
-  const lastMessageCountRef = useRef(0);
   const [availableModels, setAvailableModels] = useState([]);
-  const [selectedModel, setSelectedModel] = useState(null);
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('selected_model'));
+  const [modelPolicy, setModelPolicy] = useState(() => normalizePolicy(localStorage.getItem('model_policy')));
+  const [manualModelOverride, setManualModelOverride] = useState(() => localStorage.getItem('manual_model_override') || '');
   const [documents, setDocuments] = useState([]);
   const [currentDocument, setCurrentDocument] = useState(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(() => localStorage.getItem('selected_workflow_id') || DEFAULT_WORKFLOW_ID);
+  const [artifacts, setArtifacts] = useState([]);
+  const selectedWorkflow = getWorkflowById(selectedWorkflowId);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const conversationsHook = useConversations({ user, showToast });
+  const knowledgeHook = useKnowledgeSpaces({ user, showToast });
+  const messagesHook = useMessages({
+    user,
+    currentConversationId: conversationsHook.currentConversationId,
+    conversations: conversationsHook.conversations,
+    selectedModel,
+    selectedKnowledgeSpaceId: knowledgeHook.selectedKnowledgeSpaceId,
+    showToast,
+    fetchConversations: conversationsHook.fetchConversations,
+  });
 
+  // Use refs to avoid unstable object references in effect deps
+  const messagesRef = React.useRef(messagesHook);
+  messagesRef.current = messagesHook;
+  const conversationsRef = React.useRef(conversationsHook);
+  conversationsRef.current = conversationsHook;
+
+  // Auto-scroll when new messages are appended
   useEffect(() => {
-    // Only auto-scroll when a new message is appended (not when streaming updates content)
-    if (messages.length > lastMessageCountRef.current) {
-      scrollToBottom();
+    if (messagesRef.current.messages.length > messagesRef.current.lastMessageCountRef.current) {
+      messagesRef.current.scrollToBottom();
     }
-    lastMessageCountRef.current = messages.length;
-  }, [messages]);
+    messagesRef.current.lastMessageCountRef.current = messagesRef.current.messages.length;
+  }, [messagesHook.messages]);
 
-  const fetchMessages = useCallback(async (conversationId) => {
-    if (!conversationId) {
-      setMessages([]);
-      return;
-    }
-    try {
-      const response = await apiService.fetchMessagesForConversation(conversationId);
-      setMessages(response.data.map(msg =>
-        msg.sender === 'assistant' ? _processAssistantMessage(msg) : {
-          ...msg,
-          timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  // Fetch messages when conversation changes
+  useEffect(() => {
+    messagesRef.current.fetchMessages(conversationsRef.current.currentConversationId);
+  }, [conversationsHook.currentConversationId]);
+
+  // Fetch artifacts when conversation changes
+  useEffect(() => {
+    fetchArtifacts(conversationsRef.current.currentConversationId);
+  }, [conversationsHook.currentConversationId]);
+
+  // Initialize app state on mount / user change
+  useEffect(() => {
+    const initialize = async () => {
+      if (user) {
+        await fetchAvailableModels();
+        await knowledgeHook.fetchKnowledgeSpaces();
+        const convos = await conversationsHook.fetchConversations();
+        if (convos.length > 0) {
+          conversationsHook.setCurrentConversationId(currentId => currentId || convos[0].id);
+        } else {
+          await conversationsHook.handleNewChat();
         }
-      ));
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      setMessages([]);
-    }
-  }, []);
+      } else {
+        conversationsHook.setConversations(prev => (prev.length === 0 ? prev : []));
+        messagesHook.setMessages(prev => (prev.length === 0 ? prev : []));
+        conversationsHook.setCurrentConversationId(prev => (prev === null ? prev : null));
+        setArtifacts(prev => (prev.length === 0 ? prev : []));
+        knowledgeHook.setKnowledgeSpaces(prev => (prev.length === 0 ? prev : []));
+        knowledgeHook.setSelectedKnowledgeSpaceId(prev => (prev === null ? prev : null));
+        knowledgeHook.setKnowledgeSpaceDocuments(prev => (prev.length === 0 ? prev : []));
+        localStorage.removeItem('selected_knowledge_space_id');
+      }
+    };
+    initialize();
+  }, [user]);
 
-  const fetchConversations = useCallback(async () => {
-    if (!user) { // Only fetch conversations if a user is logged in
-      setConversations([]);
-      return [];
-    }
-    try {
-      const response = await apiService.fetchConversations();
-      setConversations(response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-      setConversations([]);
-      return [];
-    }
-  }, [user]); // Add user to dependency array
 
-  const handleNewChat = useCallback(async () => {
-    if (!user) return; // Prevent creating new chat if no user
-    try {
-      const response = await apiService.createNewChat("New Chat");
-      const newConversation = response.data;
-      await fetchConversations();
-      setCurrentConversationId(newConversation.id);
-      setMessages([]);
-    } catch (error) {
-      console.error('Error creating new chat:', error);
-    }
-  }, [fetchConversations, user]); // Add user to dependency array
+  // Keep selected model in sync with policy
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    setSelectedModel(chooseModelForPolicy(availableModels, modelPolicy, manualModelOverride));
+  }, [availableModels, manualModelOverride, modelPolicy]);
 
   const fetchAvailableModels = useCallback(async () => {
     try {
       const response = await apiService.fetchAvailableModels();
-      setAvailableModels(response.data.models);
-      if (response.data.models.length > 0) {
-        setSelectedModel(response.data.models[0]);
+      const models = response.data.models || [];
+      setAvailableModels(models);
+      if (models.length > 0) {
+        setSelectedModel(chooseModelForPolicy(models, modelPolicy, manualModelOverride));
       }
     } catch (error) {
       console.error('Error fetching available models:', error);
     }
-  }, []);
+  }, [manualModelOverride, modelPolicy]);
 
-  useEffect(() => {
-    const initialize = async () => {
-      if (user) { // Initialize only if user is logged in
-        await fetchAvailableModels();
-        const convos = await fetchConversations();
-        if (convos.length > 0) {
-          setCurrentConversationId(currentId => currentId || convos[0].id);
-        } else {
-          await handleNewChat();
-        }
-      } else {
-        // Clear chat state if no user is logged in
-        setConversations([]);
-        setMessages([]);
-        setCurrentConversationId(null);
-      }
-    };
-    initialize();
-  }, [fetchConversations, handleNewChat, fetchAvailableModels, user]); // Add user to dependency array
-
-  useEffect(() => {
-    fetchMessages(currentConversationId);
-  }, [currentConversationId, fetchMessages]);
-
-  const handleSendMessage = async (text, isWebSearchEnabled = false, isRagEnabled = true) => {
-    if (!text || !text.trim() || !currentConversationId || !selectedModel || !user) return; // Prevent sending message if no user
-
-    // --- 1. Save User Message ---
-    const userMessagePayload = {
-      conversation_id: currentConversationId,
-      sender: 'user',
-      text: text,
-      timestamp: new Date().toISOString(),
-    };
-    const savedUserMessageResponse = await apiService.saveMessage(userMessagePayload);
-    const savedUserMessage = {
-        ...savedUserMessageResponse.data,
-        timestamp: new Date(savedUserMessageResponse.data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages(prev => [...prev, savedUserMessage]);
-    setInputValue('');
-    setIsTyping(true);
-
-    // If this is the first user message, update conversation title immediately
-    const currentConversation = conversations.find(c => c.id === currentConversationId);
-    const userMessages = messages.filter(m => m.sender === 'user');
-    if (userMessages.length === 0) { // This is the first user message
-      const firstMessageText = savedUserMessage.text || '';
-      const words = firstMessageText.split(/\s+/);
-      const summary = words.slice(0, 5).join(' ');
-      const newTitle = words.length > 5 ? `${summary}...` : summary;
-      
-      // Update conversation title immediately, regardless of current title
-      apiService.renameConversation(currentConversationId, newTitle)
-        .then(() => {
-          // Refresh the conversation list to show the new title
-          fetchConversations();
-        })
-        .catch(err => console.error("Error renaming conversation:", err));
+  const fetchArtifacts = useCallback(async (conversationId) => {
+    if (!user || !conversationId) {
+      setArtifacts([]);
+      return [];
     }
-
-    // --- 2. Prepare for AI Response ---
-    const aiResponseId = Date.now().toString();
-    const aiResponsePlaceholder = {
-      id: aiResponseId,
-      conversation_id: currentConversationId,
-      sender: 'assistant',
-      thinking: '',
-      answer: '',
-      isThinkingComplete: false,
-      thinkingStartTime: Date.now(),
-      thinkingDuration: 0,
-      webSearchState: undefined,
-      ragState: undefined,
-      isPreparing: true,
-      timestamp: new Date().toISOString() // Use ISO for consistency, format on display
-    };
-    setMessages(prev => [...prev, aiResponsePlaceholder]);
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const streamPayload = {
-      conversation_id: currentConversationId,
-      text: text,
-      model: selectedModel,
-    };
-
-    const updateAIResponse = (updater) => {
-      setMessages(prev =>
-        prev.map(msg => (msg.id === aiResponseId ? updater(msg) : msg))
-      );
-    };
-
-    // --- 3. Stream and Process AI Response ---
     try {
-      const finalMessageState = { ...aiResponsePlaceholder };
-      const iterator = apiService.streamChatResponse(streamPayload, { signal: controller.signal, webSearchEnabled: isWebSearchEnabled, ragEnabled: isRagEnabled });
-
-      for await (const event of iterator) {
-        switch (event.event) {
-          case 'thread.run.step.in_progress':
-            // First sign of model thinking; stop showing pre-processing indicator
-            if (finalMessageState.isPreparing) {
-              finalMessageState.isPreparing = false;
-              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
-            }
-            finalMessageState.thinking += event.data.details;
-            updateAIResponse(msg => ({ ...msg, thinking: finalMessageState.thinking }));
-            break;
-          case 'thread.message.delta':
-            // If no thinking phase, the first token removes pre-processing indicator
-            if (finalMessageState.isPreparing) {
-              finalMessageState.isPreparing = false;
-              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
-            }
-            if (finalMessageState.thinking && !finalMessageState.isThinkingComplete) {
-              finalMessageState.isThinkingComplete = true;
-              finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
-            }
-            finalMessageState.answer += event.data.content;
-            updateAIResponse(msg => ({ ...msg, answer: finalMessageState.answer, isThinkingComplete: finalMessageState.isThinkingComplete, thinkingDuration: finalMessageState.thinkingDuration }));
-            break;
-          case 'status.websearch': {
-            const val = event.data?.value;
-            // If backend signals 'false' after emitting 'results' or 'no_results', keep the final state persistent
-            if (val === 'false' && (finalMessageState.webSearchState === 'results' || finalMessageState.webSearchState === 'no_results')) {
-              break;
-            }
-            finalMessageState.webSearchState = val;
-            updateAIResponse(msg => ({ ...msg, webSearchState: finalMessageState.webSearchState }));
-            break;
-          }
-          case 'status.rag': {
-            const val = event.data?.value;
-            if (val === 'false' && (finalMessageState.ragState === 'results' || finalMessageState.ragState === 'no_results')) {
-              break;
-            }
-            finalMessageState.ragState = val;
-            updateAIResponse(msg => ({ ...msg, ragState: finalMessageState.ragState }));
-            break;
-          }
-          case 'citations':
-            finalMessageState.citations = event.data?.items || [];
-            updateAIResponse(msg => ({ ...msg, citations: finalMessageState.citations }));
-            break;
-          case 'thread.run.completed':
-            if (finalMessageState.isPreparing) {
-              finalMessageState.isPreparing = false;
-              updateAIResponse(msg => ({ ...msg, isPreparing: false }));
-            }
-            if (!finalMessageState.isThinkingComplete) {
-              finalMessageState.isThinkingComplete = true;
-              finalMessageState.thinkingDuration = (Date.now() - finalMessageState.thinkingStartTime) / 1000;
-            }
-            
-            // --- 4. Save Final AI Message ---
-            const messageToSave = {
-              conversation_id: finalMessageState.conversation_id,
-              sender: 'assistant',
-              text: `<think>${finalMessageState.thinking}</think><answer>${finalMessageState.answer}</answer>`,
-              thinking_duration: finalMessageState.thinkingDuration,
-              timestamp: new Date().toISOString(),
-              // Persist citations and states for history
-              citations: finalMessageState.citations || [],
-              web_search_state: finalMessageState.webSearchState === 'false' ? undefined : finalMessageState.webSearchState,
-              rag_state: finalMessageState.ragState,
-            };
-
-            const savedAssistantMessage = await apiService.saveMessage(messageToSave);
-            
-            const processedMessage = _processAssistantMessage(savedAssistantMessage.data);
-            // Preserve citations and web/rag states in the final rendered message
-            const mergedMessage = {
-              ...processedMessage,
-              citations: finalMessageState.citations || [],
-              webSearchState: finalMessageState.webSearchState === 'false' ? undefined : finalMessageState.webSearchState,
-              ragState: finalMessageState.ragState,
-              isPreparing: false,
-            };
-            setMessages(prev => prev.map(m => m.id === aiResponseId ? mergedMessage : m));
-
-            // Do not overwrite the title if it has already been set based on the first user message
-            const currentConversation = conversations.find(c => c.id === currentConversationId);
-            if (currentConversation && currentConversation.title === "New Chat") {
-              // Only generate a title if no user-based title has been set
-              apiService.generateConversationTitle(currentConversationId, selectedModel)
-                .then(() => {
-                  fetchConversations();
-                })
-                .catch(err => console.error("Error generating title:", err));
-            }
-            break;
-        }
-      }
+      const response = await apiService.fetchArtifactsForConversation(conversationId);
+      const nextArtifacts = response.data || [];
+      setArtifacts(nextArtifacts);
+      return nextArtifacts;
     } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error('Error during streaming:', error);
-        updateAIResponse(msg => ({
-            ...msg,
-            answer: 'Error: Could not get a response. Please try again.',
-            isThinkingComplete: true,
-        }));
-      }
-    } finally {
-        setIsTyping(false);
-        abortControllerRef.current = null;
+      console.error('Error fetching artifacts:', error);
+      setArtifacts([]);
+      return [];
     }
-  };
-
-  const handlePromptClick = (prompt) => {
-    handleSendMessage(prompt.description);
-  };
-
-  const handleStopGeneration = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsTyping(false);
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessageIndex = newMessages.length - 1;
-        if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].sender === 'assistant') {
-          const lastMessage = newMessages[lastMessageIndex];
-          newMessages[lastMessageIndex] = {
-            ...lastMessage,
-            answer: lastMessage.answer ? lastMessage.answer + ' [Stopped]' : 'Generation stopped.',
-            isThinkingComplete: true,
-          };
-        }
-        return newMessages;
-      });
-    }
-  }, []);
-  
-  const handleSelectConversation = (conversationId) => {
-    setCurrentConversationId(conversationId);
-    setMessages([]);
-  };
-
-  const handleRenameConversation = async (conversationId) => {
-    const newTitle = prompt("Enter new title for the conversation:");
-    if (newTitle && newTitle.trim() !== "") {
-      try {
-        await apiService.renameConversation(conversationId, newTitle);
-        fetchConversations();
-      } catch (error) {
-        console.error('Error renaming conversation:', error);
-        alert('Failed to rename conversation.');
-      }
-    }
-  };
-
-  const handleDeleteConversation = async (conversationId) => {
-    if (window.confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
-      try {
-        await apiService.deleteConversation(conversationId);
-        const remainingConversations = await fetchConversations();
-
-        if (currentConversationId === conversationId) {
-          if (remainingConversations.length > 0) {
-            setCurrentConversationId(remainingConversations[0].id);
-          } else {
-            await handleNewChat();
-          }
-        }
-      } catch (error) {
-        console.error('Error deleting conversation:', error);
-        alert('Failed to delete conversation.');
-      }
-    }
-  };
+  }, [user]);
 
   const handleModelChange = (model) => {
     setSelectedModel(model);
+    localStorage.setItem('selected_model', model);
   };
 
-  const appendMessage = useCallback((message) => {
-    setMessages(prev => [...prev, {
-      ...message,
-      timestamp: new Date().toISOString(),
-    }]);
-  }, []);
+  const handleModelPolicyChange = (policy) => {
+    const nextPolicy = normalizePolicy(policy);
+    setModelPolicy(nextPolicy);
+    localStorage.setItem('model_policy', nextPolicy);
+  };
+
+  const handleManualModelOverrideChange = (model) => {
+    setManualModelOverride(model);
+    if (model) {
+      localStorage.setItem('manual_model_override', model);
+    } else {
+      localStorage.removeItem('manual_model_override');
+    }
+  };
+
+  const handleWorkflowChange = (workflowId) => {
+    const workflow = getWorkflowById(workflowId);
+    setSelectedWorkflowId(workflow.id);
+    localStorage.setItem('selected_workflow_id', workflow.id);
+  };
+
+  const createArtifact = async (artifactData) => {
+    const response = await apiService.createArtifact(artifactData);
+    const artifact = response.data;
+    setArtifacts(prev => {
+      const existingIndex = prev.findIndex(item => item.id === artifact.id);
+      if (existingIndex >= 0) {
+        return prev.map(item => (item.id === artifact.id ? artifact : item));
+      }
+      return [artifact, ...prev];
+    });
+    return artifact;
+  };
+
+  const updateArtifact = async (artifactId, artifactData) => {
+    const response = await apiService.updateArtifact(artifactId, artifactData);
+    const artifact = response.data;
+    setArtifacts(prev => prev.map(item => (item.id === artifact.id ? artifact : item)));
+    showToast('Saved artifact', 'success');
+    return artifact;
+  };
+
+  const deleteArtifact = async (artifactId) => {
+    await apiService.deleteArtifact(artifactId);
+    setArtifacts(prev => prev.filter(item => item.id !== artifactId));
+    showToast('Deleted artifact', 'success');
+  };
+
+  const uploadDocument = async (file, conversationId) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (conversationId) {
+      formData.append('conversation_id', conversationId);
+    }
+    if (knowledgeHook.selectedKnowledgeSpaceId) {
+      formData.append('knowledge_space_id', knowledgeHook.selectedKnowledgeSpaceId);
+    }
+    try {
+      const response = await apiService.uploadDocument(formData);
+      setDocuments(prev => [...prev, response.data]);
+      await knowledgeHook.fetchSelectedKnowledgeSpace(response.data.knowledge_space_id || knowledgeHook.selectedKnowledgeSpaceId);
+      return response.data;
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      throw error;
+    }
+  };
+
+  const deleteDocument = async (documentId) => {
+    try {
+      await apiService.deleteDocument(documentId);
+      setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
+      await knowledgeHook.fetchSelectedKnowledgeSpace();
+      showToast('Deleted knowledge source', 'success');
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      throw error;
+    }
+  };
+
+  const fetchDocument = async (documentId) => {
+    try {
+      const response = await apiService.fetchDocument(documentId);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching document:', error);
+      throw error;
+    }
+  };
 
   const chatContextValue = {
-    messages,
-    setMessages,
-    appendMessage,
-    inputValue,
-    setInputValue,
-    isTyping,
-    setIsTyping,
-    conversations,
-    setConversations,
-    currentConversationId,
-    setCurrentConversationId,
-    creatingNewChat,
-    setCreatingNewChat,
+    ...messagesHook,
+    ...conversationsHook,
+    ...knowledgeHook,
     isChatInputFullScreen,
     setIsChatInputFullScreen,
-    chatEndRef,
     availableModels,
     selectedModel,
     handleModelChange,
-    scrollToBottom,
-    fetchConversations,
-    fetchMessages,
-    handleSendMessage,
-    handlePromptClick,
-    handleNewChat,
-    handleStopGeneration,
-    handleSelectConversation,
-    handleRenameConversation,
-    handleDeleteConversation,
+    modelPolicy,
+    modelPolicies: MODEL_POLICIES,
+    handleModelPolicyChange,
+    manualModelOverride,
+    handleManualModelOverrideChange,
+    workflows: WORKFLOWS,
+    selectedWorkflow,
+    selectedWorkflowId,
+    handleWorkflowChange,
+    artifacts,
+    fetchArtifacts,
+    createArtifact,
+    updateArtifact,
+    deleteArtifact,
     documents,
     currentDocument,
-    uploadDocument: async (file, conversationId) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (conversationId) {
-        formData.append('conversation_id', conversationId);
-      }
-      
-      try {
-        const response = await apiService.uploadDocument(formData);
-        setDocuments(prev => [...prev, response.data]);
-        return response.data;
-      } catch (error) {
-        console.error('Error uploading document:', error);
-        throw error;
-      }
-    },
-    deleteDocument: async (documentId) => {
-      try {
-        await apiService.deleteDocument(documentId);
-        setDocuments(prev => prev.filter(doc => doc.document_id !== documentId));
-      } catch (error) {
-        console.error('Error deleting document:', error);
-        throw error;
-      }
-    },
-    fetchDocument: async (documentId) => {
-      try {
-        const response = await apiService.fetchDocument(documentId);
-        return response.data;
-      } catch (error) {
-        console.error('Error fetching document:', error);
-        throw error;
-      }
-    },
+    setCurrentDocument,
+    uploadDocument,
+    deleteDocument,
+    fetchDocument,
   };
 
   return (
     <ChatContext.Provider value={chatContextValue}>
       {children}
+      <ConfirmDialog
+        open={!!conversationsHook.deleteConfirmId}
+        title="Delete Conversation"
+        message="Are you sure you want to delete this conversation? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger
+        onConfirm={conversationsHook.confirmDeleteConversation}
+        onCancel={() => conversationsHook.setDeleteConfirmId(null)}
+      />
     </ChatContext.Provider>
   );
 };

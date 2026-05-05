@@ -1,78 +1,78 @@
 import React, { createContext, useState, useEffect } from 'react';
-import axios from 'axios';
-import { setAuthHeader, login as apiLogin, register as apiRegister, getCurrentUser } from './services/apiService';
+import { setAuthHeader, login as apiLogin, logout as apiLogout, register as apiRegister, getCurrentUser, refreshAccessToken } from './services/apiService';
 
 export const AuthContext = createContext();
 
+/**
+ * Authentication context provider.
+ * Manages user session using HttpOnly cookies (backend) with in-memory token state.
+ * On mount, attempts to restore the session by calling /api/auth/users/me.
+ *
+ * @param {{ children: React.ReactNode }} props
+ * @returns {JSX.Element}
+ */
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('access_token'));
+  const [token, setToken] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    /** Clears local auth state without calling the backend. */
+    const clearAuthState = () => {
+      setToken(null);
+      setUser(null);
+      setAuthHeader(null);
+    };
+
+    window.addEventListener('auth:session-expired', clearAuthState);
+
+    /** Validates the current session on app mount. */
     const initializeAuth = async () => {
-      const accessToken = localStorage.getItem('access_token');
-      if (accessToken) {
-        setAuthHeader(accessToken);
-        try {
-          const userResponse = await getCurrentUser();
-          setUser(userResponse.data);
-          setToken(accessToken);
-        } catch (error) {
-          // If token is invalid, try to refresh
-          try {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-              const refreshResponse = await axios.post(
-                `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100'}/api/auth/refresh`,
-                { refresh_token: refreshToken }
-              );
-              const { access_token } = refreshResponse.data;
-              localStorage.setItem('access_token', access_token);
-              setAuthHeader(access_token);
-              setToken(access_token);
-              const userResponse = await getCurrentUser();
-              setUser(userResponse.data);
-            } else {
-              throw error;
-            }
-          } catch (refreshError) {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            setToken(null);
-            setUser(null);
-            setAuthHeader(null);
-          }
-        }
+      try {
+        const userResponse = await getCurrentUser();
+        setUser(userResponse.data);
+      } catch (error) {
+        // If not authenticated, user stays null
+        setUser(null);
       }
+      setIsLoading(false);
     };
     initializeAuth();
+    return () => window.removeEventListener('auth:session-expired', clearAuthState);
   }, []);
 
+  /**
+   * Logs in the user with email and password.
+   * Backend sets HttpOnly cookies; frontend stores access_token in memory.
+   * @param {string} email
+   * @param {string} password
+   */
   const login = async (email, password) => {
     const response = await apiLogin(email, password);
-    const { access_token, refresh_token } = response.data;
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('refresh_token', refresh_token);
+    const { access_token } = response.data;
     setToken(access_token);
-    setAuthHeader(access_token);
     const userResponse = await getCurrentUser();
     setUser(userResponse.data);
   };
 
+  /**
+   * Registers a new user.
+   * @param {Object} userData
+   */
   const register = async (userData) => {
     await apiRegister(userData);
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+  /** Logs out the user and clears cookies via the backend. */
+  const logout = async () => {
+    await apiLogout();
+    setAuthHeader(null);
     setToken(null);
     setUser(null);
-    setAuthHeader(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, token, login, logout, register }}>
+    <AuthContext.Provider value={{ user, setUser, token, isLoading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );

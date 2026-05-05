@@ -7,9 +7,30 @@ const REFRESH_THRESHOLD_MINUTES = 2; // Refresh 2 minutes before expiration
 
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
+  withCredentials: true,
+});
+
+// Add request interceptor to attach AbortControllers
+apiClient.interceptors.request.use((config) => {
+  // Only auto-attach if caller didn't provide their own signal
+  if (!config.signal) {
+    const controller = new AbortController();
+    config.signal = controller.signal;
+    config._autoController = controller;
+    activeControllers.add(controller);
+    // Clean up when request finishes
+    const cleanup = () => activeControllers.delete(controller);
+    config._cleanup = cleanup;
+  }
+  return config;
 });
 
 let refreshTimer = null;
+let isRefreshing = false;
+let refreshPromise = null;
+
+// Track active AbortControllers for request cancellation on logout
+const activeControllers = new Set();
 
 const clearRefreshTimer = () => {
   if (refreshTimer) {
@@ -20,14 +41,14 @@ const clearRefreshTimer = () => {
 
 const scheduleTokenRefresh = (token) => {
   clearRefreshTimer();
-  
+
   try {
     const decoded = jwtDecode(token);
     const expiresAt = decoded.exp * 1000; // Convert to ms
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     const refreshThreshold = REFRESH_THRESHOLD_MINUTES * 60 * 1000;
-    
+
     if (timeUntilExpiry > refreshThreshold) {
       refreshTimer = setTimeout(() => {
         refreshAccessToken();
@@ -38,72 +59,100 @@ const scheduleTokenRefresh = (token) => {
   }
 };
 
-const refreshAccessToken = async () => {
-  try {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) return;
-
-    const response = await apiClient.post('/api/auth/refresh', { refresh_token: refreshToken });
-    const { access_token } = response.data;
-    
-    localStorage.setItem('access_token', access_token);
-    setAuthHeader(access_token);
-    scheduleTokenRefresh(access_token);
-  } catch (error) {
-    console.error('Token refresh failed:', error);
-    clearRefreshTimer();
+export const refreshAccessToken = async () => {
+  // Prevent concurrent refresh requests
+  if (isRefreshing) {
+    return refreshPromise;
   }
+
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      // Refresh token is sent automatically via HttpOnly cookie
+      const response = await apiClient.post('/api/auth/refresh', {});
+      const { access_token } = response.data;
+
+      setAuthHeader(access_token);
+      scheduleTokenRefresh(access_token);
+      return access_token;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      clearRefreshTimer();
+      setAuthHeader(null);
+      window.dispatchEvent(new Event('auth:session-expired'));
+      throw error;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 };
 
-// Initialize auth token if exists
-const token = localStorage.getItem('access_token');
-if (token) {
-  apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  scheduleTokenRefresh(token);
-}
+// Proactive token refresh is scheduled after login/refresh responses
 
-// Add response interceptor for token refresh
+// Keep Axios header and refresh timer in sync when the streaming layer refreshes tokens
+window.addEventListener('auth:token-refreshed', (event) => {
+  const { access_token } = event.detail || {};
+  if (access_token) {
+    setAuthHeader(access_token);
+    scheduleTokenRefresh(access_token);
+  }
+});
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const isRetryableError = (error) => {
+  if (!error.response) return true; // network/timeout errors
+  const status = error.response.status;
+  return status >= 500 || status === 429; // server errors or rate limited
+};
+
+// Add response interceptor for token refresh and transient error retry
 apiClient.interceptors.response.use(
-  response => response,
+  response => {
+    // Clean up auto-attached controller
+    const config = response.config;
+    if (config?._cleanup) config._cleanup();
+    return response;
+  },
   async error => {
+    // Clean up auto-attached controller on error too
+    const config = error.config;
+    if (config?._cleanup) config._cleanup();
     const originalRequest = error.config;
-    
+    if (!originalRequest) return Promise.reject(error);
+
+    // Retry transient errors with exponential backoff
+    const retryCount = originalRequest._retryCount || 0;
+    const maxRetries = 3;
+    if (isRetryableError(error) && retryCount < maxRetries && !originalRequest.url.includes('/auth/refresh')) {
+      originalRequest._retryCount = retryCount + 1;
+      const delay = Math.min(1000 * (2 ** retryCount), 8000);
+      await sleep(delay);
+      return apiClient(originalRequest);
+    }
+
     // If 401 and not a refresh request
     if (error.response?.status === 401 &&
         !originalRequest._retry &&
         !originalRequest.url.includes('/auth/refresh')) {
       originalRequest._retry = true;
-      
+
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) {
-          // No refresh token available - clear everything
+        if (!localStorage.getItem('refresh_token')) {
           localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
           setAuthHeader(null);
-          return Promise.reject(new Error('No refresh token available'));
+          window.dispatchEvent(new Event('auth:session-expired'));
+          return Promise.reject(error);
         }
-        
-        const refreshResponse = await apiClient.post('/api/auth/refresh', { refresh_token: refreshToken });
-        const { access_token } = refreshResponse.data;
-        
-        localStorage.setItem('access_token', access_token);
-        setAuthHeader(access_token);
+        const access_token = await refreshAccessToken();
         originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
-        
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Clear tokens if refresh fails and prevent infinite loop
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setAuthHeader(null);
-        
-        // Only reject if this isn't already a refresh request
-        if (!originalRequest.url.includes('/auth/refresh')) {
-          return Promise.reject(refreshError);
-        }
-        // For refresh failures, return original error to prevent loop
-        return Promise.reject(error);
+        // Refresh failed — auth state already cleared by refreshAccessToken
+        return Promise.reject(refreshError);
       }
     }
     return Promise.reject(error);
@@ -132,12 +181,36 @@ export const cleanupDocuments = () => {
   return apiClient.post('/api/documents/cleanup');
 };
 
+export const fetchKnowledgeSpaces = () => {
+  return apiClient.get('/api/documents/spaces');
+};
+
+export const createKnowledgeSpace = (spaceData) => {
+  return apiClient.post('/api/documents/spaces', spaceData);
+};
+
+export const fetchKnowledgeSpace = (spaceId) => {
+  return apiClient.get(`/api/documents/spaces/${spaceId}`);
+};
+
+export const updateKnowledgeSpace = (spaceId, spaceData) => {
+  return apiClient.patch(`/api/documents/spaces/${spaceId}`, spaceData);
+};
+
+export const deleteKnowledgeSpace = (spaceId) => {
+  return apiClient.delete(`/api/documents/spaces/${spaceId}`);
+};
+
 export const fetchConversations = () => {
   return apiClient.get('/api/chat/conversations');
 };
 
 export const fetchMessagesForConversation = (conversationId) => {
   return apiClient.get(`/api/chat/conversations/${conversationId}/messages`);
+};
+
+export const fetchArtifactsForConversation = (conversationId) => {
+  return apiClient.get(`/api/chat/conversations/${conversationId}/artifacts`);
 };
 
 export const createNewChat = (title) => {
@@ -159,17 +232,25 @@ export const fetchLLMConfig = () => {
   return apiClient.get('/api/openai/config');
 };
 
+/**
+ * Initiates a streaming chat request to the backend.
+ * Uses the fetch API for SSE-style streaming with abort signal support.
+ * @param {Object} payload - Chat payload containing conversation_id, text, model, knowledge_space_id
+ * @param {{ signal: AbortSignal, webSearchEnabled: boolean, ragEnabled: boolean }} options
+ * @returns {AsyncGenerator} Yields parsed stream events (tags, deltas, status)
+ */
 export const streamChatResponse = (payload, { signal, webSearchEnabled, ragEnabled }) => {
     const url = `${BACKEND_URL}/api/openai/chat`;
-    
+
     // Structure payload according to StreamRequestPayload model
+    // Token is sent via Authorization header, not in body
     const requestPayload = {
         conversation_id: payload.conversation_id,
         text: payload.text,
         model: payload.model,
+        knowledge_space_id: payload.knowledge_space_id,
         web_search_enabled: webSearchEnabled,
         rag_enabled: ragEnabled,
-        token: localStorage.getItem('access_token') // Add token to payload
     };
 
     // Pass the properly structured payload and signal to the streaming service
@@ -180,10 +261,41 @@ export const saveMessage = (message) => {
   return apiClient.post('/api/chat/messages', message);
 };
 
+export const createArtifact = (artifact) => {
+  return apiClient.post('/api/chat/artifacts', artifact);
+};
+
+export const updateArtifact = (artifactId, artifact) => {
+  return apiClient.patch(`/api/chat/artifacts/${artifactId}`, artifact);
+};
+
+export const deleteArtifact = (artifactId) => {
+  return apiClient.delete(`/api/chat/artifacts/${artifactId}`);
+};
+
+export const fetchTools = () => {
+  return apiClient.get('/api/tools');
+};
+
+export const updateTool = (toolId, tool) => {
+  return apiClient.patch(`/api/tools/${toolId}`, tool);
+};
+
+export const fetchToolAuditEvents = () => {
+  return apiClient.get('/api/tools/audit');
+};
+
 export const generateConversationTitle = (conversationId, model) => {
   return apiClient.post(`/api/chat/conversations/${conversationId}/generate-title`, { model });
 };
 
+/**
+ * Authenticates a user and stores the access token in memory.
+ * Backend sets HttpOnly refresh and access token cookies automatically.
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<import('axios').AxiosResponse>}
+ */
 export const login = async (email, password) => {
   const formData = new URLSearchParams();
   formData.append('username', email);
@@ -192,10 +304,8 @@ export const login = async (email, password) => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   
-  // Store both tokens
-  const { access_token, refresh_token } = response.data;
-  localStorage.setItem('access_token', access_token);
-  localStorage.setItem('refresh_token', refresh_token);
+  // Cookies are set by the backend (HttpOnly, Secure, SameSite=Strict)
+  const { access_token } = response.data;
   setAuthHeader(access_token);
   scheduleTokenRefresh(access_token);
   
@@ -214,11 +324,25 @@ export const updateUser = (userData) => {
   return apiClient.patch('/api/auth/users/me', userData);
 };
 
-export const logout = () => {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-  setAuthHeader(null);
-  clearRefreshTimer();
+/**
+ * Logs out the current user, aborts in-flight requests,
+ * and clears the access token header.
+ */
+export const logout = async () => {
+  // Cancel all in-flight requests before clearing auth
+  activeControllers.forEach((controller) => {
+    try { controller.abort(); } catch (e) { /* ignore */ }
+  });
+  activeControllers.clear();
+
+  try {
+    await apiClient.post('/api/auth/logout');
+  } catch (error) {
+    // Ignore errors — backend cookies are cleared regardless
+  } finally {
+    setAuthHeader(null);
+    clearRefreshTimer();
+  }
 };
 
 export const deleteAccount = () => {

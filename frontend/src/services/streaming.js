@@ -1,6 +1,40 @@
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 
-async function* parseStreamByTags(textStream) {
+let isRefreshing = false;
+let refreshPromise = null;
+
+async function refreshAccessToken() {
+  if (isRefreshing) {
+    return refreshPromise;
+  }
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100';
+      const response = await fetch(`${backendUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) throw new Error('Refresh failed');
+
+      const { access_token, refresh_token } = await response.json();
+      // Notify the Axios layer so it can update its default header and timer
+      window.dispatchEvent(new CustomEvent('auth:token-refreshed', {
+        detail: { access_token }
+      }));
+      return access_token;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+export async function* parseStreamByTags(textStream) {
     let state = 'seeking'; // 'seeking', 'in_think', 'in_answer', 'in_websearch'
     let buffer = '';
 
@@ -100,12 +134,42 @@ async function* openAIStreamToText(sseReader) {
 export async function* streamResponse(url, requestOptions) {
     const { signal, ...bodyPayload } = requestOptions;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload),
-        signal: signal,
-    });
+    const makeRequest = async () => {
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(bodyPayload),
+            signal: signal,
+            credentials: 'include',
+        });
+        return response;
+    };
+
+    let response = await makeRequest();
+
+    // Handle 401 by refreshing token and retrying once
+    if (response.status === 401) {
+        try {
+            await refreshAccessToken();
+            response = await makeRequest();
+        } catch (refreshError) {
+            // Refresh failed — clear auth and throw
+            window.dispatchEvent(new Event('auth:session-expired'));
+            throw new Error('Session expired. Please log in again.');
+        }
+    }
+
+    if (response.status === 403) {
+        const errorData = await response.json().catch(() => ({ detail: 'This tool is disabled for your role' }));
+        const error = new Error(errorData.detail || 'This tool is disabled for your role');
+        error.name = 'ToolForbiddenError';
+        error.status = 403;
+        throw error;
+    }
 
     if (!response.body) {
         throw new Error('Response body is null');
