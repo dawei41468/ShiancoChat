@@ -1,3 +1,5 @@
+import React from 'react';
+
 /**
  * React ErrorBoundary that catches JavaScript errors in child components
  * and renders a fallback UI instead of crashing the entire app.
