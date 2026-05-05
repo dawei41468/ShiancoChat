@@ -4,6 +4,7 @@ import { AuthContext } from '../AuthContext';
 import ShiancoChatHeader from '../components/ShiancoChatHeader';
 import ThemeToggle from '../components/ThemeToggle';
 import EyeIcon from '../components/icons/EyeIcon';
+import { validateEmail, validatePassword, getPasswordStrength } from '../utils/validation';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -13,17 +14,62 @@ export default function RegisterPage() {
   const [department, setDepartment] = useState('senior_management');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  const passwordStrength = getPasswordStrength(password);
+
+  const handleEmailChange = (e) => {
+    const value = e.target.value;
+    setEmail(value);
+    if (value) {
+      const result = validateEmail(value);
+      setEmailError(result.valid ? '' : result.error);
+    } else {
+      setEmailError('');
+    }
+  };
+
+  const handlePasswordChange = (e) => {
+    const value = e.target.value;
+    setPassword(value);
+    if (value) {
+      const result = validatePassword(value);
+      setPasswordError(result.valid ? '' : result.error);
+    } else {
+      setPasswordError('');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Validate all fields before submission
+    const emailResult = validateEmail(email);
+    const passwordResult = validatePassword(password);
+
+    if (!emailResult.valid) {
+      setEmailError(emailResult.error);
+      return;
+    }
+    if (!passwordResult.valid) {
+      setPasswordError(passwordResult.error);
+      return;
+    }
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
     try {
       await register({ name, email, password, department });
       navigate('/login');
     } catch (err) {
-      setError('Failed to register. Please try again.');
+      const detail = err.response?.data?.detail;
+      setError(detail || 'Failed to register. Please try again.');
     }
   };
 
@@ -62,11 +108,12 @@ export default function RegisterPage() {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={handleEmailChange}
               required
               autoComplete="username"
-              className="w-full px-3 py-2 mt-1 border rounded-md bg-input border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full px-3 py-2 mt-1 border rounded-md bg-input border-border focus:outline-none focus:ring-2 ${emailError ? 'border-red-500 focus:ring-red-500' : 'focus:ring-primary'}`}
             />
+            {emailError && <p className="text-xs text-red-500 mt-1">{emailError}</p>}
           </div>
           <div>
             <label
@@ -80,10 +127,10 @@ export default function RegisterPage() {
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={handlePasswordChange}
                 required
                 autoComplete="new-password"
-                className="w-full px-3 py-2 mt-1 border rounded-md bg-input border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                className={`w-full px-3 py-2 mt-1 border rounded-md bg-input border-border focus:outline-none focus:ring-2 ${passwordError ? 'border-red-500 focus:ring-red-500' : 'focus:ring-primary'}`}
               />
               <button
                 type="button"
@@ -93,6 +140,23 @@ export default function RegisterPage() {
                 <EyeIcon isOpen={showPassword} />
               </button>
             </div>
+            {passwordError && <p className="text-xs text-red-500 mt-1">{passwordError}</p>}
+            {password && (
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                      style={{ width: passwordStrength.width }}
+                    />
+                  </div>
+                  <span className="text-xs text-text-secondary">{passwordStrength.label}</span>
+                </div>
+                <p className="text-xs text-text-secondary mt-1">
+                  Min 12 chars, uppercase, lowercase, number, special char
+                </p>
+              </div>
+            )}
           </div>
           <div>
             <label

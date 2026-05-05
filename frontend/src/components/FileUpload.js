@@ -6,7 +6,7 @@ const FileUpload = ({ onUploadComplete }) => {
   const [file, setFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { appendMessage } = useChat();
+  const { appendMessage, currentConversationId, selectedKnowledgeSpaceId, fetchSelectedKnowledgeSpace } = useChat();
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -23,13 +23,21 @@ const FileUpload = ({ onUploadComplete }) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (currentConversationId) {
+        formData.append('conversation_id', currentConversationId);
+      }
+      if (selectedKnowledgeSpaceId) {
+        formData.append('knowledge_space_id', selectedKnowledgeSpaceId);
+      }
 
       const response = await uploadDocument(formData);
+      const document = response.data;
       appendMessage({
-        text: `Uploaded document: ${response.filename}\n\n${response.content}`,
+        text: `Uploaded document: ${document.filename}\n\n${document.content}`,
         sender: 'user'
       });
-      onUploadComplete?.(response);
+      await fetchSelectedKnowledgeSpace(document.knowledge_space_id || selectedKnowledgeSpaceId);
+      onUploadComplete?.(document);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to upload file');
     } finally {
@@ -42,7 +50,7 @@ const FileUpload = ({ onUploadComplete }) => {
       <div className="flex items-center gap-2">
         <input
           type="file"
-          accept=".pdf,.doc,.docx,.txt"
+          accept=".pdf,.docx,.txt,.xlsx"
           onChange={handleFileChange}
           className="block w-full text-sm text-gray-500
             file:mr-4 file:py-2 file:px-4

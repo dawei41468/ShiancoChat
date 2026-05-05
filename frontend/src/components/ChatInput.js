@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { uploadDocument } from '@/services/apiService';
-import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Image, Globe } from 'lucide-react';
+import { uploadDocument, fetchTools } from '@/services/apiService';
+import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Globe, Workflow } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
 import * as apiService from '@/services/apiService';
@@ -25,7 +25,7 @@ const AttachmentMenu = ({ onFileSelect }) => {
   const triggerFileInput = () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.pdf,.doc,.docx,.txt';
+    fileInput.accept = '.pdf,.docx,.txt,.xlsx';
     fileInput.onchange = onFileSelect;
     fileInput.click();
     setIsOpen(false);
@@ -53,12 +53,6 @@ const AttachmentMenu = ({ onFileSelect }) => {
             <FileText className="w-4 h-4" />
             <span>{t.document || "Document"}</span>
           </button>
-          <button
-            className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-text-primary hover:bg-hover rounded-b-lg"
-          >
-            <Image className="w-4 h-4" />
-            <span>{t.image || "Image"}</span>
-          </button>
         </div>
       )}
     </div>
@@ -76,20 +70,60 @@ const ChatInput = ({ sidebarOpen }) => {
     isChatInputFullScreen,
     setIsChatInputFullScreen,
     handleStopGeneration,
+    workflows,
+    selectedWorkflowId,
+    handleWorkflowChange,
     currentConversationId,
-    setMessages
+    selectedKnowledgeSpace,
+    selectedKnowledgeSpaceId,
+    knowledgeSpaceDocuments,
+    fetchSelectedKnowledgeSpace
   } = useChat();
-  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(true);
-  const [isRagEnabled, setIsRagEnabled] = useState(true);
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
+  const [isRagEnabled, setIsRagEnabled] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [toolConfigs, setToolConfigs] = useState([]);
+  const [toolsLoading, setToolsLoading] = useState(true);
 
-  // Initialize defaults from localStorage
+  // Fetch tool configs from backend and initialize toggles from default_enabled
   useEffect(() => {
-    const w = localStorage.getItem('default_web_search');
-    const r = localStorage.getItem('default_rag');
-    if (w !== null) setIsWebSearchEnabled(w === 'true');
-    if (r !== null) setIsRagEnabled(r === 'true');
+    const loadTools = async () => {
+      try {
+        const response = await fetchTools();
+        const tools = response.data || [];
+        setToolConfigs(tools);
+
+        const webSearchTool = tools.find(t => t.id === 'web_search');
+        const fileSearchTool = tools.find(t => t.id === 'file_search');
+
+        const savedWeb = localStorage.getItem('default_web_search');
+        const savedRag = localStorage.getItem('default_rag');
+
+        if (webSearchTool) {
+          const initial = savedWeb !== null ? savedWeb === 'true' : !!webSearchTool.default_enabled;
+          setIsWebSearchEnabled(initial);
+        } else {
+          setIsWebSearchEnabled(false);
+        }
+
+        if (fileSearchTool) {
+          const initial = savedRag !== null ? savedRag === 'true' : !!fileSearchTool.default_enabled;
+          setIsRagEnabled(initial);
+        } else {
+          setIsRagEnabled(false);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tools:', error);
+        const w = localStorage.getItem('default_web_search');
+        const r = localStorage.getItem('default_rag');
+        if (w !== null) setIsWebSearchEnabled(w === 'true');
+        if (r !== null) setIsRagEnabled(r === 'true');
+      } finally {
+        setToolsLoading(false);
+      }
+    };
+    loadTools();
   }, []);
 
   const handleFileSelect = async (e) => {
@@ -102,43 +136,37 @@ const ChatInput = ({ sidebarOpen }) => {
     setSelectedFile(file);
     setIsUploading(true);
 
-    console.group('File Upload Process');
     try {
-      console.log('Selected file:', file.name, file.size, file.type);
-      
       const formData = new FormData();
       formData.append('file', file);
-      console.log('FormData prepared');
+      formData.append('conversation_id', currentConversationId);
+      if (selectedKnowledgeSpaceId) {
+        formData.append('knowledge_space_id', selectedKnowledgeSpaceId);
+      }
 
-      console.log('Making API call to /api/documents/upload');
-      const startTime = Date.now();
       const response = await uploadDocument(formData);
-      const duration = Date.now() - startTime;
-      
-      console.log(`Upload completed in ${duration}ms`, response);
-      
+
       // Save document reference to backend without creating a message
       await apiService.saveDocument({
         conversation_id: currentConversationId,
         document_id: response.data.document_id,
         filename: response.data.filename,
-        content_type: response.data.content_type
+        content_type: response.data.content_type,
+        knowledge_space_id: response.data.knowledge_space_id
       });
+      await fetchSelectedKnowledgeSpace(response.data.knowledge_space_id || selectedKnowledgeSpaceId);
     } catch (error) {
       console.error('Upload failed:', error);
-      if (error.response) {
-        console.error('Server response:', error.response.data);
-      }
     } finally {
       setIsUploading(false);
-      console.groupEnd();
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (inputValue.trim() && !isTyping) {
-      handleSendMessage(inputValue, isWebSearchEnabled, isRagEnabled);
+      const sent = await handleSendMessage(inputValue, isWebSearchEnabled, isRagEnabled);
+      if (!sent) return;
       if (textareaRef.current) {
         textareaRef.current.style.height = '40px';
         setIsChatInputFullScreen(false);
@@ -148,7 +176,7 @@ const ChatInput = ({ sidebarOpen }) => {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
@@ -160,20 +188,27 @@ const ChatInput = ({ sidebarOpen }) => {
   };
 
   const handleToggleWebSearch = () => {
-    setIsWebSearchEnabled(prev => !prev);
+    setIsWebSearchEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('default_web_search', String(next));
+      return next;
+    });
   };
 
   const handleToggleRag = () => {
-    setIsRagEnabled(prev => !prev);
+    setIsRagEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('default_rag', String(next));
+      return next;
+    });
   };
+
+  const knowledgeSourceCount = knowledgeSpaceDocuments.length;
+  const activeKnowledgeName = selectedKnowledgeSpace?.name || 'No knowledge space';
 
   return (
     <div
-      className={`fixed bottom-0 z-10 border-t p-4 transition-all duration-300 ease-in-out flex flex-col bg-background border-border ${isChatInputFullScreen ? 'h-[94.1vh]' : ''}`}
-      style={{
-        left: sidebarOpen ? '288px' : '0px',
-        right: '0px',
-      }}
+      className={`border-t p-4 transition-all duration-300 ease-in-out flex flex-col bg-background border-border ${isChatInputFullScreen ? 'fixed inset-0 z-50 h-screen' : ''}`}
     >
       <div className="mx-auto flex-1 flex flex-col w-full max-w-4xl">
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
@@ -183,7 +218,7 @@ const ChatInput = ({ sidebarOpen }) => {
                 ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder={t.sendMessage || "Send a message..."}
                 className={`
                   w-full h-full pl-4 pr-12 py-3 rounded-t-xl resize-none no-scrollbar
@@ -205,28 +240,65 @@ const ChatInput = ({ sidebarOpen }) => {
             <div className="flex justify-between items-center p-0.5 rounded-b-xl">
               <div className="flex items-center space-x-2">
                 <AttachmentMenu onFileSelect={handleFileSelect} />
-                <button
-                  type="button"
-                  onClick={handleToggleWebSearch}
-                  className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
-                    isWebSearchEnabled ? 'bg-purple-gradient text-white' : 'bg-surface border border-border hover:bg-hover text-text-secondary'
-                  }`}
-                  aria-label="Web search"
-                >
-                  <Globe className="w-4 h-4" />
-                  <span className="text-xs font-medium">{t.webSearch || "Web Search"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleRag}
-                  className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
-                    isRagEnabled ? 'bg-blue-500 text-white' : 'bg-surface border border-border hover:bg-hover text-text-secondary'
-                  }`}
-                  aria-label="RAG search"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span className="text-xs font-medium">{t.rag || "RAG"}</span>
-                </button>
+                <div className="hidden sm:flex items-center gap-1 rounded-lg bg-surface border border-border px-1 py-1">
+                  <Workflow className="w-4 h-4 text-text-secondary" />
+                  <select
+                    value={selectedWorkflowId}
+                    onChange={(event) => handleWorkflowChange(event.target.value)}
+                    className="max-w-28 bg-transparent text-xs font-medium text-text-primary focus:outline-none"
+                    aria-label="Workflow"
+                    title="Workflow"
+                  >
+                    {workflows.map((workflow) => (
+                      <option key={workflow.id} value={workflow.id}>{workflow.shortLabel}</option>
+                    ))}
+                  </select>
+                </div>
+                {toolConfigs.some(t => t.id === 'web_search') && (
+                  <button
+                    type="button"
+                    onClick={handleToggleWebSearch}
+                    disabled={!toolConfigs.find(t => t.id === 'web_search')?.enabled}
+                    className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
+                      isWebSearchEnabled
+                        ? 'bg-purple-gradient text-white'
+                        : 'bg-surface border border-border hover:bg-hover text-text-secondary'
+                    } ${!toolConfigs.find(t => t.id === 'web_search')?.enabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label="Web search"
+                    title={!toolConfigs.find(t => t.id === 'web_search')?.enabled ? 'Web Search is disabled' : ''}
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span className="text-xs font-medium">{t.webSearch || "Web Search"}</span>
+                  </button>
+                )}
+                {toolConfigs.some(t => t.id === 'file_search') && (
+                  <button
+                    type="button"
+                    onClick={handleToggleRag}
+                    disabled={!toolConfigs.find(t => t.id === 'file_search')?.enabled}
+                    className={`flex items-center space-x-1 p-1 rounded-lg transition-colors ${
+                      isRagEnabled
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-surface border border-border hover:bg-hover text-text-secondary'
+                    } ${!toolConfigs.find(t => t.id === 'file_search')?.enabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label="RAG search"
+                    title={!toolConfigs.find(t => t.id === 'file_search')?.enabled ? 'File Search is disabled' : `${activeKnowledgeName}: ${knowledgeSourceCount} sources`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span className="text-xs font-medium">{t.rag || "RAG"}</span>
+                  </button>
+                )}
+                {isRagEnabled && (
+                  <div className={`hidden sm:flex items-center gap-1 text-xs px-2 py-1 rounded-lg ${
+                    knowledgeSourceCount > 0
+                      ? 'text-text-secondary bg-hover'
+                      : 'text-amber-600 bg-amber-500/10 border border-amber-500/30'
+                  }`}>
+                    <FileText className="w-3 h-3" />
+                    <span className="truncate max-w-[140px]">{activeKnowledgeName}</span>
+                    <span>{knowledgeSourceCount}</span>
+                  </div>
+                )}
                 {(selectedFile || isUploading) && (
                   <div className="flex items-center gap-1 text-xs text-text-secondary bg-hover px-2 py-1 rounded-lg">
                     <FileText className="w-3 h-3" />

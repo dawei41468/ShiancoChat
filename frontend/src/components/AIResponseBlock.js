@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ChevronDown, Copy, Check, Clock, Globe, FileText, ExternalLink } from 'lucide-react';
+import { ChevronDown, Copy, Check, Clock, Globe, FileText, ExternalLink, PanelRightOpen } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useTheme } from '@/ThemeContext';
 import ChatBubbleIcon from '@/components/icons/ChatBubbleIcon';
@@ -45,7 +45,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
   );
 };
 
-const AIResponseBlock = ({ response }) => {
+const AIResponseBlock = ({ response, onOpenArtifact }) => {
   const getStatusText = () => {
     const { t, webSearchState, isThinkingComplete, thinkingDuration, isPreparing } = response;
     if (isPreparing) {
@@ -92,11 +92,20 @@ const AIResponseBlock = ({ response }) => {
     return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : '';
   };
 
+  const getSourceLabel = (item) => {
+    if (!item) return 'Source';
+    if (item.type === 'web' || item.url) {
+      return item.title || extractDomain(item.url || '') || item.url || 'Web source';
+    }
+    return item.title || item.filename || (item.document_id ? `Document ${item.document_id}` : 'Document source');
+  };
+
   const hasErrorBanner = typeof answer === 'string' && (
     answer.includes('LLM service is not available') ||
     answer.includes('No LLM endpoint reachable') ||
     answer.includes('Failed to connect to LLM service')
   );
+  const noSourcesBanner = ragState === 'no_results';
 
   useEffect(() => {
     // Animate dots for preparing indicator
@@ -217,6 +226,11 @@ const AIResponseBlock = ({ response }) => {
               </div>
             </div>
           )}
+          {noSourcesBanner && (
+            <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+              {t?.ragNoSources || 'No document sources were found in the selected knowledge space.'}
+            </div>
+          )}
           {/* Status chips + inline source icons */}
           {(webSearchState || ragState || (Array.isArray(citations) && citations.length > 0)) && (
             <div className="flex flex-nowrap items-center gap-2 mb-2 overflow-x-auto">
@@ -250,7 +264,7 @@ const AIResponseBlock = ({ response }) => {
                       <button
                         key={idx}
                         type="button"
-                        title={isWeb ? (item.title || domain || item.url) : (item.document_id ? `Document ${item.document_id}` : 'Source')}
+	                        title={getSourceLabel(item)}
                         onClick={() => setOpenSourceIndex(openSourceIndex === idx ? null : idx)}
                         className="relative w-7 h-7 rounded-full border border-border bg-surface hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary-500"
                         style={{ marginLeft: idx === 0 ? 0 : -8, zIndex: citations.length - idx }}
@@ -280,7 +294,7 @@ const AIResponseBlock = ({ response }) => {
                   <div className="space-y-1">
                     <div className="text-xs text-text-secondary flex items-center gap-2">
                       {isWeb ? <Globe size={14} /> : <FileText size={14} />}
-                      <span>{isWeb ? (domain || it.source || 'web') : (it.document_id ? `Document ${it.document_id}` : 'Source')}</span>
+	                      <span>{isWeb ? (domain || it.source || 'web') : getSourceLabel(it)}</span>
                       {it.source && (
                         <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-hover border border-border text-text-secondary">
                           {it.source}
@@ -294,9 +308,14 @@ const AIResponseBlock = ({ response }) => {
                           <ExternalLink size={14} className="text-text-secondary" />
                         </a>
                       ) : (
-                        <span>{it.title || (it.document_id ? `Document ${it.document_id}` : 'Source')}</span>
-                      )}
-                    </div>
+	                        <span>{getSourceLabel(it)}</span>
+	                      )}
+	                    </div>
+	                    {!isWeb && (
+	                      <div className="text-xs text-text-secondary">
+	                        {it.indexing_status || 'indexed'}{typeof it.chunk_index === 'number' ? ` · chunk ${it.chunk_index + 1}` : ''}{typeof it.similarity === 'number' ? ` · ${(it.similarity * 100).toFixed(0)}% match` : ''}
+	                      </div>
+	                    )}
                     {it.snippet && (
                       <div className="text-sm text-text-secondary">{it.snippet}</div>
                     )}
@@ -307,6 +326,20 @@ const AIResponseBlock = ({ response }) => {
           )}
           {answer && (
             <div className={`prose prose-sm max-w-none ${theme === 'dark' ? 'prose-invert' : ''}`}>
+              {onOpenArtifact && (
+                <div className="not-prose mb-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtifact(response)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-secondary hover:bg-hover"
+                    aria-label="Open as artifact"
+                    title="Open as artifact"
+                  >
+                    <PanelRightOpen className="h-3.5 w-3.5" />
+                    <span>Artifact</span>
+                  </button>
+                </div>
+              )}
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{ code: CodeBlock }}

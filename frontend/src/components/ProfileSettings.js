@@ -5,6 +5,7 @@ import { useTheme } from '../ThemeContext';
 import { updateUser, deleteAccount } from '../services/apiService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from './ToastNotification';
+import ConfirmDialog from './ConfirmDialog';
 
 export default function ProfileSettings() {
   const { t } = useLanguage();
@@ -14,6 +15,7 @@ export default function ProfileSettings() {
 
   const [userName, setUserName] = useState('');
   const { user, setUser, logout } = useContext(AuthContext);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const userEmail = user ? user.email : 'N/A';
 
   useEffect(() => {
@@ -27,8 +29,6 @@ export default function ProfileSettings() {
   };
 
   const handleSaveUserName = async () => {
-    console.log('Attempting to save user name:', userName);
-    console.log('Authorization header before update:', localStorage.getItem('token')); // Directly check localStorage token
     try {
       const response = await updateUser({ name: userName });
       setUser(response.data); // Update user in AuthContext
@@ -39,17 +39,20 @@ export default function ProfileSettings() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (window.confirm(t.confirmDeleteAccount || 'Are you sure you want to delete your account? This action cannot be undone.')) {
-      try {
-        await deleteAccount();
-        logout(); // Clear user session
-        showToast(t.accountDeletedSuccessfully || 'Account deleted successfully!', 'success');
-        navigate('/login'); // Redirect to login page
-      } catch (error) {
-        console.error('Failed to delete account:', error);
-        showToast(t.failedToDeleteAccount || 'Failed to delete account. Please try again.', 'error');
-      }
+  const handleDeleteAccount = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteAccount = async () => {
+    setShowDeleteConfirm(false);
+    try {
+      await deleteAccount();
+      logout(); // Clear user session
+      showToast(t.accountDeletedSuccessfully || 'Account deleted successfully!', 'success');
+      navigate('/login'); // Redirect to login page
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      showToast(t.failedToDeleteAccount || 'Failed to delete account. Please try again.', 'error');
     }
   };
 
@@ -100,6 +103,16 @@ export default function ProfileSettings() {
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Account"
+        message={t.confirmDeleteAccount || 'Are you sure you want to delete your account? This action cannot be undone.'}
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger
+        onConfirm={confirmDeleteAccount}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </section>
   );
 }
