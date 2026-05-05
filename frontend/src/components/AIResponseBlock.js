@@ -47,8 +47,18 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
 
 const AIResponseBlock = ({ response, onOpenArtifact }) => {
   const getStatusText = () => {
-    const { t, webSearchState, isThinkingComplete, thinkingDuration, isPreparing } = response;
+    const { t, webSearchState, ragState, isThinkingComplete, thinkingDuration, isPreparing } = response;
     if (isPreparing) {
+      // Show what step is currently running while waiting for the LLM
+      if (webSearchState === 'true') {
+        return (t?.webSearching || 'Searching the web') + ('.'.repeat(dotCount));
+      }
+      if (ragState === 'true') {
+        return (t?.ragSearching || 'Searching documents') + ('.'.repeat(dotCount));
+      }
+      if (webSearchState === 'results' || webSearchState === 'no_results' || ragState === 'results' || ragState === 'no_results') {
+        return (t?.thinking || 'Thinking') + ('.'.repeat(dotCount));
+      }
       return (t?.processing || 'Hold on, processing') + ('.'.repeat(dotCount));
     }
     if (isThinkingComplete) {

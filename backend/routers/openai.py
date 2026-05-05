@@ -29,7 +29,7 @@ def is_conversational_greeting(query: str) -> bool:
         "hello", "hi ", "hi,", "hi!", "hey", "how are you", "how's it going",
         "what's up", "good morning", "good afternoon", "good evening",
         "thank you", "thanks", "ok", "okay", "sure", "alright", "bye",
-        "good night", "nice to meet you", "pleased to meet you"
+        "good night", "nice to meet you", "pleased to meet you", "yo"
     ]
     return any(lower.startswith(g) or lower == g.strip() for g in greetings)
 
@@ -172,7 +172,7 @@ async def chat_with_openai(
                 details={"result_count": len(search_results)},
             )
             search_context = "\n\nWeb Search Results:\n"
-            for i, res in enumerate(search_results):
+            for i, res in enumerate(search_results[:3]):
                 search_context += f"{i+1}. Title: {res.title if res.title else 'N/A'}\n"
                 search_context += f"   URL: {res.url if res.url else 'N/A'}\n"
                 search_context += f"   Snippet: {res.snippet if res.snippet else 'N/A'}\n"
