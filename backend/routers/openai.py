@@ -22,23 +22,26 @@ from backend.routers.tools import assert_tool_allowed, get_tool_config, record_t
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+def is_conversational_greeting(query: str) -> bool:
+    """Detects obvious small-talk / greeting queries that never need web search."""
+    lower = query.lower().strip()
+    greetings = [
+        "hello", "hi ", "hi,", "hi!", "hey", "how are you", "how's it going",
+        "what's up", "good morning", "good afternoon", "good evening",
+        "thank you", "thanks", "ok", "okay", "sure", "alright", "bye",
+        "good night", "nice to meet you", "pleased to meet you"
+    ]
+    return any(lower.startswith(g) or lower == g.strip() for g in greetings)
+
+
 def should_use_web_search(query: str) -> bool:
     """
-    Determines if web search should be triggered based on the user's query.
-    This function is designed to be conservative and only trigger a search
-    when it's highly likely that the user is asking for information that
-    the LLM doesn't have.
+    Determines if web search should be triggered automatically (toggle OFF).
+    Conservative heuristic for queries that likely need real-time info.
     """
     lower_query = query.lower().strip()
 
-    # Exclude common conversational queries
-    conversational_starters = [
-        "what is your name", "who are you", "hello", "how are you",
-        "thank you", "thanks", "ok", "okay", "sure", "alright",
-        "please", "can you", "could you", "will you",
-        "give me", "tell me", "show me", "explain"
-    ]
-    if any(lower_query.startswith(starter) for starter in conversational_starters):
+    if is_conversational_greeting(query):
         return False
 
     # Keywords that strongly suggest a need for real-time information
@@ -47,7 +50,8 @@ def should_use_web_search(query: str) -> bool:
         "weather forecast", "live score", "election results",
         "who won", "what's the score", "is it raining",
         "latest update", "recent news", "top headlines",
-        "current president", "current prime minister", "current leader"
+        "current president", "current prime minister", "current leader",
+        "playoffs", "championship", "nba", "super bowl", "world cup"
     ]
     if any(keyword in lower_query for keyword in search_keywords):
         return True
@@ -125,11 +129,12 @@ async def chat_with_openai(
         user_query = payload["messages"][-1]["content"]
         query_wants_search = should_use_web_search(user_query)
         if input.web_search_enabled:
-            if query_wants_search:
+            # When user explicitly toggles search ON, only skip obvious greetings
+            if is_conversational_greeting(user_query):
+                logger.info(f"Web search toggle on but query is a greeting; skipping search for: '{user_query}'")
+            else:
                 perform_search = True
                 logger.info(f"Web search explicitly enabled by user for query: '{user_query}'")
-            else:
-                logger.info(f"Web search toggle on but query is conversational; skipping search for: '{user_query}'")
         elif query_wants_search:
             web_search_tool = await get_tool_config(db, "web_search")
             if user_can_use_tool(web_search_tool, current_user):
