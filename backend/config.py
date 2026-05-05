@@ -1,9 +1,13 @@
+import logging
 from pathlib import Path
 from typing import Optional, List, ClassVar
+from urllib.parse import urlparse
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 class Environment(str, Enum):
     DEVELOPMENT = "development"
@@ -30,6 +34,10 @@ class AppConfig(BaseSettings):
         description="Required secret key (minimum 32 characters) for cryptographic operations"
     )
     allowed_hosts: List[str] = Field(default=["localhost"])
+    cors_origins: List[str] = Field(
+        default=["http://localhost:4141", "http://localhost:4100"],
+        description="Allowed CORS origins"
+    )
     
     # Database settings
     mongo_url: Optional[str] = Field(
@@ -75,6 +83,52 @@ class AppConfig(BaseSettings):
     llm_retry_backoff_seconds: float = Field(default=0.75)
     http_proxy: Optional[str] = Field(default=None)
     https_proxy: Optional[str] = Field(default=None)
+
+    # RAG / Vector Search settings
+    embedding_model_name: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Name of the sentence-transformers model to use for embeddings"
+    )
+    embedding_model_path: Optional[str] = Field(
+        default=None,
+        description="Optional explicit path to embedding model directory"
+    )
+    vector_search_enabled: bool = Field(
+        default=False,
+        description="Enable MongoDB Atlas Vector Search (requires Atlas cluster with vector index)"
+    )
+    vector_search_index: str = Field(
+        default="vector_index",
+        description="Name of the MongoDB Atlas vector search index"
+    )
+    rag_similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity threshold for RAG results"
+    )
+    rag_top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Number of top chunks to retrieve for RAG"
+    )
+    rag_mmr_lambda: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="MMR lambda: 1.0 = pure relevance, 0.0 = pure diversity"
+    )
+    hybrid_search_enabled: bool = Field(
+        default=False,
+        description="Enable hybrid search (vector + full-text). Requires text index on document_chunks.content"
+    )
+    hybrid_search_alpha: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Hybrid search weight: alpha * vector_score + (1-alpha) * text_score"
+    )
     
     # Path configurations
     base_dir: Path = Field(default_factory=lambda: Path(__file__).resolve().parent.parent)
@@ -85,7 +139,7 @@ class AppConfig(BaseSettings):
         if v < 8:
             raise ValueError("Password minimum length must be at least 8")
         return v
-    
+
     def model_post_init(self, __context) -> None:
         """Validate required fields after initialization"""
         if not self.secret_key:
@@ -98,16 +152,29 @@ class AppConfig(BaseSettings):
         if not (self.llm_base_url or (self.llm_base_urls and len(self.llm_base_urls) > 0)):
             raise ValueError("At least one LLM base URL is required. Set LLM_BASE_URL or LLM_BASE_URLS in .env")
 
+def _mask_url_credentials(url: str) -> str:
+    """Mask username/password in a URL for safe logging."""
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url)
+        if parsed.password:
+            netloc = parsed.netloc.replace(f":{parsed.password}@", ":****@")
+            return url.replace(parsed.netloc, netloc)
+    except Exception:
+        pass
+    return url
+
+
 def load_config() -> AppConfig:
     """Initialize and return the application configuration"""
     # Load .env from backend directory explicitly
     env_path = Path(__file__).parent / '.env'
-    print(f"Loading environment variables from: {env_path}")
+    logger.info(f"Loading environment variables from: {env_path}")
     load_dotenv(env_path)
     
     # Log environment variables
     import os
-    print("Environment variables:")
     for var in [
         'PORT', 'SECRET_KEY', 'MONGO_URL', 'DB_NAME',
         'LLM_BASE_URL', 'LLM_BASE_URLS',
@@ -117,9 +184,11 @@ def load_config() -> AppConfig:
         value = os.getenv(var)
         if var == 'SECRET_KEY' and value:
             value = '******'  # Mask secret key
+        if var == 'MONGO_URL' and value:
+            value = _mask_url_credentials(value)  # Mask credentials in MongoDB URL
         if var in ('HTTP_PROXY', 'HTTPS_PROXY') and value:
             value = 'Set'  # Avoid printing proxy URL or credentials
-        print(f"{var}: {value if value else 'Not set'}")
+        logger.info(f"{var}: {value if value else 'Not set'}")
     
     try:
         return AppConfig()  # Will raise validation error if required fields are missing
