@@ -76,6 +76,8 @@ const AIResponseBlock = ({ response, onOpenArtifact }) => {
 
   // UI state for source detail popover
   const [openSourceIndex, setOpenSourceIndex] = useState(null);
+  // Track favicons that failed to load so we can show a fallback icon
+  const [failedFavicons, setFailedFavicons] = useState(new Set());
 
   const extractDomain = (url) => {
     try {
@@ -269,8 +271,13 @@ const AIResponseBlock = ({ response, onOpenArtifact }) => {
                         className="relative w-7 h-7 rounded-full border border-border bg-surface hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary-500"
                         style={{ marginLeft: idx === 0 ? 0 : -8, zIndex: citations.length - idx }}
                       >
-                        {isWeb && iconSrc ? (
-                          <img src={iconSrc} alt={domain} className="w-full h-full rounded-full object-cover" />
+                        {isWeb && iconSrc && !failedFavicons.has(idx) ? (
+                          <img
+                            src={iconSrc}
+                            alt={domain}
+                            className="w-full h-full rounded-full object-cover"
+                            onError={() => setFailedFavicons(prev => new Set(prev).add(idx))}
+                          />
                         ) : (
                           <div className="w-full h-full rounded-full flex items-center justify-center text-text-secondary">
                             <FileText size={14} />
