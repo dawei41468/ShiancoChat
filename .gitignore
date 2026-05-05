@@ -27,6 +27,7 @@ next-env.d.ts
 
 # Production builds
 /build
+frontend/build/
 dist/
 dist
 
@@ -84,4 +85,13 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ 
+android-sdk/
+
+# ML model weights (downloaded on first use)
+backend/models/
+*.onnx
+*.onnx_data
+*.safetensors
+*.bin
+*.pt
+*.pth
