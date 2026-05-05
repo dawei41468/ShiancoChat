@@ -1,3 +1,20 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { AuthProvider, AuthContext } from './AuthContext';
+import { LanguageProvider } from './LanguageContext';
+import { ChatProvider } from './ChatContext';
+import { LoadingProvider } from './LoadingContext';
+import TutorialsPage from './pages/TutorialsPage';
+import FAQPage from './pages/FAQPage';
+import SettingsPage from './pages/SettingsPage';
+import AdminPage from './pages/AdminPage';
+import ChatPage from './pages/ChatPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
+import RouteErrorBoundary from '@/components/RouteErrorBoundary';
+
 /**
  * Root application component.
  * Sets up React Router, auth/language/chat context providers, and route structure.
