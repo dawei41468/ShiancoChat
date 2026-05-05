@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 from motor.motor_asyncio import AsyncIOMotorDatabase # Import the correct type hint
 
 from backend.database import get_db, delete_user
 from backend.models import User, UserRole, UserRoleUpdate, UserPublic # Import UserRoleUpdate
 from backend.auth import get_current_user
+from backend.rate_limiter import limiter
 from pymongo import ReturnDocument
 
 router = APIRouter(
@@ -12,18 +13,27 @@ router = APIRouter(
 )
 
 @router.get("", response_model=List[UserPublic])
-async def get_all_users(db: AsyncIOMotorDatabase = Depends(get_db), current_user: User = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def get_all_users(
+    request: Request,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access user data"
         )
-    users_data = await db.users.find().to_list(length=None)
+    users_data = await db.users.find().skip(skip).limit(limit).to_list(length=None)
     users = [UserPublic(**User(**user_data).dict(exclude={"hashed_password"})) for user_data in users_data]
     return users
 
 @router.patch("/{user_id}/role", response_model=UserPublic)
+@limiter.limit("30/minute")
 async def update_user_role(
+    request: Request,
     user_id: str,
     role_update: UserRoleUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -54,7 +64,9 @@ async def update_user_role(
     return UserPublic(**User(**updated_user_data).dict(exclude={"hashed_password"}))
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def delete_user_endpoint(
+    request: Request,
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: User = Depends(get_current_user)

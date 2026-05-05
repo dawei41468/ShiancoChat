@@ -1,9 +1,5 @@
 import os
 from pathlib import Path
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
-from pydantic import SecretStr
 from .models import SearchResult
 from .duckduckgo import DuckDuckGoEngine
 import logging
@@ -12,6 +8,10 @@ from typing import List, Optional
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+class WebSearchError(Exception):
+    """Raised when web search fails due to an error (as opposed to returning no results)."""
+    pass
 
 async def perform_web_search(
     query: str,
@@ -169,13 +169,5 @@ async def perform_web_search(
         return sorted_results[:max_results]
     except Exception as e:
         logger.error(f"Web search failed: {str(e)}")
-        return []
+        raise WebSearchError(f"Web search failed: {e}") from e
 
-# Add RAG indexing function
-def index_knowledge(docs: List[str]):  # Assuming docs is a list of strings or Documents
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-    chunks = splitter.split_text('\n\n'.join(docs))  # Use split_text for list of strings
-    openai_api_key = os.getenv('OPENAI_API_KEY', '')
-    embeddings = OpenAIEmbeddings(api_key=SecretStr(openai_api_key) if openai_api_key else None)
-    vectorstore = FAISS.from_texts(chunks, embeddings)  # Use from_texts for text chunks
-    vectorstore.save_local('knowledge_index')  # Save the vector store

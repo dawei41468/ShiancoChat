@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 from backend.database import get_db
-from backend.models import Message, MessageSavePayload, Conversation, ConversationCreate, UpdateConversationTitleRequest, User, TitleGenerationRequest
+from backend.models import Artifact, ArtifactCreate, ArtifactUpdate, Message, MessageSavePayload, Conversation, ConversationCreate, UpdateConversationTitleRequest, User, TitleGenerationRequest
 from datetime import datetime, timezone
 from backend import auth # Import auth module for get_current_user
+from backend.rate_limiter import limiter
+from backend.routers import openai as openai_router
 
 router = APIRouter()
 
 @router.post("/new", response_model=Conversation)
+@limiter.limit("30/minute")
 async def create_new_chat(
+    request: Request,
     conversation_data: ConversationCreate,
     current_user: User = Depends(auth.get_current_user),
     db=Depends(get_db)
@@ -26,34 +30,154 @@ async def create_new_chat(
     return new_conversation
 
 @router.get("/conversations", response_model=List[Conversation])
+@limiter.limit("60/minute")
 async def fetch_conversations(
+    request: Request,
+    skip: int = 0,
+    limit: int = 50,
     current_user: User = Depends(auth.get_current_user),
     db=Depends(get_db)
 ):
     """
-    Fetches all conversations for the current user.
+    Fetches all conversations for the current user with pagination.
     """
-    conversations = await db.conversations.find({"user_email": current_user.email}).sort("last_updated", -1).to_list(1000)
+    conversations = await db.conversations.find({"user_email": current_user.email}).sort("last_updated", -1).skip(skip).limit(limit).to_list(length=None)
     return [Conversation(**conv) for conv in conversations]
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[Message])
+@limiter.limit("120/minute")
 async def fetch_messages_for_conversation(
+    request: Request,
     conversation_id: str,
+    skip: int = 0,
+    limit: int = 100,
     current_user: User = Depends(auth.get_current_user),
     db=Depends(get_db)
 ):
     """
-    Fetches messages for a specific conversation, ensuring it belongs to the current user.
+    Fetches messages for a specific conversation with pagination.
     """
     conversation = await db.conversations.find_one({"id": conversation_id, "user_email": current_user.email})
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or not owned by user")
-    
-    messages = await db.messages.find({"conversation_id": conversation_id}).sort("timestamp", 1).to_list(1000)
+
+    messages = await db.messages.find({"conversation_id": conversation_id}).sort("timestamp", 1).skip(skip).limit(limit).to_list(length=None)
     return [Message(**msg) for msg in messages]
 
+@router.get("/conversations/{conversation_id}/artifacts", response_model=List[Artifact])
+@limiter.limit("120/minute")
+async def fetch_artifacts_for_conversation(
+    request: Request,
+    conversation_id: str,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(auth.get_current_user),
+    db=Depends(get_db)
+):
+    conversation = await db.conversations.find_one({"id": conversation_id, "user_email": current_user.email})
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or not owned by user")
+
+    artifacts = await db.artifacts.find({
+        "conversation_id": conversation_id,
+        "user_email": current_user.email,
+    }).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
+    return [Artifact(**artifact) for artifact in artifacts]
+
+@router.post("/artifacts", response_model=Artifact)
+@limiter.limit("120/minute")
+async def create_artifact(
+    request: Request,
+    artifact_data: ArtifactCreate,
+    current_user: User = Depends(auth.get_current_user),
+    db=Depends(get_db)
+):
+    conversation = await db.conversations.find_one({
+        "id": artifact_data.conversation_id,
+        "user_email": current_user.email,
+    })
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or not owned by user")
+
+    if artifact_data.source_message_id:
+        message = await db.messages.find_one({
+            "id": artifact_data.source_message_id,
+            "conversation_id": artifact_data.conversation_id,
+        })
+        if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source message not found")
+
+        existing = await db.artifacts.find_one({
+            "conversation_id": artifact_data.conversation_id,
+            "user_email": current_user.email,
+            "source_message_id": artifact_data.source_message_id,
+        })
+        if existing:
+            return Artifact(**existing)
+
+    now = datetime.now(timezone.utc)
+    artifact = Artifact(
+        conversation_id=artifact_data.conversation_id,
+        user_email=current_user.email,
+        source_message_id=artifact_data.source_message_id,
+        type=artifact_data.type,
+        title=artifact_data.title,
+        content=artifact_data.content,
+        created_at=now,
+        updated_at=now,
+    )
+    await db.artifacts.insert_one(artifact.dict())
+    return artifact
+
+@router.patch("/artifacts/{artifact_id}", response_model=Artifact)
+@limiter.limit("120/minute")
+async def update_artifact(
+    request: Request,
+    artifact_id: str,
+    artifact_data: ArtifactUpdate,
+    current_user: User = Depends(auth.get_current_user),
+    db=Depends(get_db)
+):
+    existing = await db.artifacts.find_one({"id": artifact_id, "user_email": current_user.email})
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+
+    update_data = {}
+    if artifact_data.title is not None:
+        title = artifact_data.title.strip()
+        if not title:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Artifact title is required")
+        update_data["title"] = title
+    if artifact_data.content is not None:
+        update_data["content"] = artifact_data.content
+
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc)
+        await db.artifacts.update_one(
+            {"id": artifact_id, "user_email": current_user.email},
+            {"$set": update_data}
+        )
+
+    updated = await db.artifacts.find_one({"id": artifact_id, "user_email": current_user.email})
+    return Artifact(**updated)
+
+@router.delete("/artifacts/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("60/minute")
+async def delete_artifact(
+    request: Request,
+    artifact_id: str,
+    current_user: User = Depends(auth.get_current_user),
+    db=Depends(get_db)
+):
+    result = await db.artifacts.delete_one({"id": artifact_id, "user_email": current_user.email})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact not found")
+    return
+
 @router.post("/messages", response_model=Message)
+@limiter.limit("120/minute")
 async def save_message(
+    request: Request,
     message_data: MessageSavePayload,
     current_user: User = Depends(auth.get_current_user),
     db=Depends(get_db)
@@ -88,7 +212,9 @@ async def save_message(
     return new_message
 
 @router.put("/conversations/{conversation_id}", response_model=Conversation)
+@limiter.limit("30/minute")
 async def rename_conversation(
+    request: Request,
     conversation_id: str,
     update_data: UpdateConversationTitleRequest,
     current_user: User = Depends(auth.get_current_user),
@@ -110,7 +236,9 @@ async def rename_conversation(
     return Conversation(**updated_conversation)
 
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def delete_conversation(
+    request: Request,
     conversation_id: str,
     current_user: User = Depends(auth.get_current_user),
     db=Depends(get_db)
@@ -123,11 +251,14 @@ async def delete_conversation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or not owned by user")
     
     await db.messages.delete_many({"conversation_id": conversation_id})
+    await db.artifacts.delete_many({"conversation_id": conversation_id, "user_email": current_user.email})
     await db.conversations.delete_one({"id": conversation_id})
     return
 
 @router.post("/conversations/{conversation_id}/generate-title")
+@limiter.limit("30/minute")
 async def generate_conversation_title(
+    request: Request,
     conversation_id: str,
     request_data: TitleGenerationRequest,
     current_user: User = Depends(auth.get_current_user),
@@ -148,12 +279,17 @@ async def generate_conversation_title(
     
     if first_user_message:
         message_text = first_user_message.get("text", "")
-        words = message_text.split()
-        summary = " ".join(words[:5])
-        new_title = summary if len(words) <= 5 else f"{summary}..."
+        messages = [{"role": "user", "content": message_text}]
+        try:
+            new_title = await openai_router.generate_title(messages, request_data.model)
+        except Exception as e:
+            logger.error(f"LLM title generation failed: {e}")
+            words = message_text.split()
+            summary = " ".join(words[:5])
+            new_title = summary if len(words) <= 5 else f"{summary}..."
     else:
         new_title = f"AI Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    
+
     await db.conversations.update_one(
         {"id": conversation_id},
         {"$set": {"title": new_title, "last_updated": datetime.now(timezone.utc)}}

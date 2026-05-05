@@ -55,7 +55,8 @@ class TokenData(BaseModel):
    email: Optional[str] = None
 
 class RefreshToken(BaseModel):
-   token: str = Field(default_factory=lambda: str(uuid.uuid4()))
+   token_hash: str
+   jti: str
    email: str
    expires_at: datetime
    is_active: bool = True
@@ -96,6 +97,52 @@ class MessageSavePayload(BaseModel):
     web_search_state: Optional[str] = None
     rag_state: Optional[str] = None
 
+class Artifact(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    conversation_id: str
+    user_email: str
+    source_message_id: Optional[str] = None
+    type: str
+    title: str
+    content: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ArtifactCreate(BaseModel):
+    conversation_id: str
+    source_message_id: Optional[str] = None
+    type: str
+    title: str
+    content: str
+
+class ArtifactUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+class ToolConfig(BaseModel):
+    id: str
+    label: str
+    description: Optional[str] = None
+    enabled: bool = True
+    allowed_roles: List[UserRole] = Field(default_factory=lambda: [UserRole.USER, UserRole.ADMIN])
+    default_enabled: bool = False
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ToolConfigUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    allowed_roles: Optional[List[UserRole]] = None
+    default_enabled: Optional[bool] = None
+
+class ToolAuditEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tool_id: str
+    user_email: str
+    conversation_id: Optional[str] = None
+    status: str
+    latency_ms: Optional[int] = None
+    details: Optional[dict] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 # Payload for INITIATING a stream from the frontend
 class StreamRequestPayload(BaseModel):
     conversation_id: str
@@ -103,13 +150,14 @@ class StreamRequestPayload(BaseModel):
     model: str # Model is required to know which LLM to call
     web_search_enabled: Optional[bool] = False
     rag_enabled: Optional[bool] = False
-    token: Optional[str] = None
+    knowledge_space_id: Optional[str] = None
 class TitleGenerationRequest(BaseModel):
     model: str
 
 class DocumentChunk(BaseModel):
     """Model for storing document chunks and embeddings"""
     document_id: str
+    knowledge_space_id: Optional[str] = None
     chunk_index: int
     content: str
     embedding: Optional[List[float]] = None
@@ -120,9 +168,29 @@ class Document(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     filename: str
     user_email: Optional[str] = None
+    knowledge_space_id: Optional[str] = None
     content: str
     content_type: str
     expires_at: datetime
     conversation_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     chunk_count: int = 0
+
+class KnowledgeSpace(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = None
+    owner_email: str
+    scope: str = "user"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    document_count: int = 0
+
+class KnowledgeSpaceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    scope: str = "user"
+
+class KnowledgeSpaceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None

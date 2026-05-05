@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
@@ -26,15 +27,23 @@ def get_password_hash(password: str) -> str:
     """Generate password hash"""
     return pwd_context.hash(password)
 
-def create_refresh_token() -> tuple[str, datetime]:
+def create_refresh_token(email: str) -> tuple[str, datetime, str]:
     """Create refresh token with expiration"""
+    issued_at = datetime.now(timezone.utc)
     expires_at = datetime.now(timezone.utc) + timedelta(days=config.refresh_token_expire_days)
+    jti = str(uuid.uuid4())
     token = jwt.encode(
-        {"exp": expires_at},
+        {
+            "sub": email,
+            "jti": jti,
+            "type": "refresh",
+            "iat": issued_at,
+            "exp": expires_at,
+        },
         str(config.secret_key),
         algorithm="HS256"
     )
-    return token, expires_at
+    return token, expires_at, jti
 
 __all__ = [
     'create_access_token',

@@ -6,20 +6,21 @@ from urllib.parse import urlparse
 import logging
 import re
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request
+from time import perf_counter
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
-from backend.models import StreamRequestPayload
+from backend.models import StreamRequestPayload, User
 from backend.database import get_db
-from backend.utils.web_search.main import perform_web_search
+from backend.utils.web_search.main import perform_web_search, WebSearchError
 from backend.utils.rag import embed_query, search_chunks
-from jose import jwt, JWTError
-from backend.auth import SECRET_KEY, ALGORITHM
+from backend.config import config
+from backend.rate_limiter import limiter
+from backend.auth import get_current_user
+from backend.routers.tools import assert_tool_allowed, get_tool_config, record_tool_audit, user_can_use_tool
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-from backend.config import config
 
 def should_use_web_search(query: str) -> bool:
     """
@@ -68,7 +69,14 @@ def should_use_web_search(query: str) -> bool:
     return False
 
 @router.post("/chat")
-async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Depends(get_db)):
+@limiter.limit("30/minute")
+async def chat_with_openai(
+    input: StreamRequestPayload,
+    request: Request,
+    db=Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    user_email = current_user.email
     payload = {
         "model": input.model,
         "messages": [],
@@ -76,6 +84,16 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
     }
 
     if input.conversation_id:
+        conversation = await db.conversations.find_one({
+            "id": input.conversation_id,
+            "user_email": current_user.email,
+        })
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or not owned by user",
+            )
+
         messages_cursor = db.messages.find({"conversation_id": input.conversation_id}).sort("timestamp", 1)
         async for msg_doc in messages_cursor:
             role = 'assistant' if msg_doc["sender"] in ['ai', 'assistant'] else msg_doc["sender"]
@@ -94,6 +112,15 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
     # Determine if web search should be performed
     perform_search = False
     user_query = ""
+    web_search_allowed = False
+    file_search_allowed = False
+    if input.web_search_enabled:
+        await assert_tool_allowed(db, "web_search", current_user)
+        web_search_allowed = True
+    if input.rag_enabled:
+        await assert_tool_allowed(db, "file_search", current_user)
+        file_search_allowed = True
+
     if payload["messages"]:
         user_query = payload["messages"][-1]["content"]
         if input.web_search_enabled: # If the user has enabled the toggle, always perform a web search
@@ -101,8 +128,13 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
             logger.info(f"Web search explicitly enabled by user for query: '{user_query}'")
         else:  # If not manually enabled, check if we should enable it automatically
             if should_use_web_search(user_query):
-                perform_search = True
-                logger.info(f"Autonomously enabling web search for query: '{user_query}'")
+                web_search_tool = await get_tool_config(db, "web_search")
+                if user_can_use_tool(web_search_tool, current_user):
+                    web_search_allowed = True
+                    perform_search = True
+                    logger.info(f"Autonomously enabling web search for query: '{user_query}'")
+                else:
+                    logger.info("Autonomous web search skipped by tool policy")
     else:
         logger.warning("No messages found in payload, skipping web search and RAG processing")
 
@@ -110,10 +142,27 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
 
     # Handle web search if enabled
     search_context = None
+    search_failed = False
     if perform_search and user_query:
         # Let the web search orchestrator determine engines via env (WEB_SEARCH_ENGINES)
-        search_results = await perform_web_search(user_query)
+        search_started = perf_counter()
+        try:
+            search_results = await perform_web_search(user_query)
+        except WebSearchError as e:
+            search_results = []
+            search_failed = True
+            logger.error(f"Web search error: {e}")
+        search_latency_ms = int((perf_counter() - search_started) * 1000)
         if search_results:
+            await record_tool_audit(
+                db,
+                tool_id="web_search",
+                current_user=current_user,
+                conversation_id=input.conversation_id,
+                status="success",
+                latency_ms=search_latency_ms,
+                details={"result_count": len(search_results)},
+            )
             search_context = "\n\nWeb Search Results:\n"
             for i, res in enumerate(search_results):
                 search_context += f"{i+1}. Title: {res.title if res.title else 'N/A'}\n"
@@ -127,7 +176,20 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                 logger.warning("No messages found in payload, cannot augment with web search results")
             logger.info(f"Augmented prompt with web search results for OpenAI.")
         else:
-            logger.warning("Web search was performed but no results were found or an error occurred.")
+            audit_status = "error" if search_failed else "no_results"
+            await record_tool_audit(
+                db,
+                tool_id="web_search",
+                current_user=current_user,
+                conversation_id=input.conversation_id,
+                status=audit_status,
+                latency_ms=search_latency_ms,
+                details={"result_count": 0, "reason": "search_failed" if search_failed else "empty_results"},
+            )
+            if search_failed:
+                logger.warning("Web search failed due to an error. Answering based on existing knowledge.")
+            else:
+                logger.warning("Web search was performed but no results were found.")
             # Check if payload["messages"] is not empty before accessing it
             if payload["messages"]:
                 payload["messages"][-1]["content"] = "(Web search failed. Answering based on my existing knowledge.)\n\n" + user_query
@@ -135,28 +197,55 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                 logger.warning("No messages found in payload, cannot set web search failure message")
 
     # Handle RAG if enabled
-    perform_rag = input.rag_enabled
+    perform_rag = input.rag_enabled and file_search_allowed
     rag_context = ""
     rag_chunks = None
     if perform_rag and user_query:
         logger.info(f"RAG enabled for query: '{user_query}'")
+        rag_started = perf_counter()
         query_embedding = await embed_query(user_query)
         if query_embedding:
-            # Try to decode user email from token if provided for per-user filtering
-            user_email = None
-            if input.token:
-                try:
-                    decoded_payload = jwt.decode(input.token, SECRET_KEY, algorithms=[ALGORITHM])
-                    user_email = decoded_payload.get("sub")
-                except JWTError:
-                    logger.warning("Failed to decode JWT from streaming payload; proceeding without user filter")
-
-            chunks = await search_chunks(user_email, query_embedding, top_k=5, threshold=0.7, conversation_id=input.conversation_id)
+            # Pass query_text for hybrid search support
+            chunks = await search_chunks(
+                user_email, query_embedding,
+                top_k=5, threshold=0.7,
+                conversation_id=input.conversation_id,
+                knowledge_space_id=input.knowledge_space_id,
+                query_text=user_query
+            )
             if chunks:
+                await record_tool_audit(
+                    db,
+                    tool_id="file_search",
+                    current_user=current_user,
+                    conversation_id=input.conversation_id,
+                    status="success",
+                    latency_ms=int((perf_counter() - rag_started) * 1000),
+                    details={"result_count": len(chunks), "knowledge_space_id": input.knowledge_space_id},
+                )
+                doc_ids = list({chunk["document_id"] for chunk in chunks if chunk.get("document_id")})
+                doc_metadata = {}
+                if doc_ids:
+                    docs = await db.documents.find({
+                        "_id": {"$in": doc_ids},
+                        "user_email": user_email,
+                    }).to_list(len(doc_ids))
+                    doc_metadata = {
+                        doc["_id"]: {
+                            "filename": doc.get("filename"),
+                            "knowledge_space_id": doc.get("knowledge_space_id"),
+                            "indexing_status": doc.get("indexing_status"),
+                        } for doc in docs
+                    }
                 rag_chunks = chunks
                 rag_context = "\n\nRelevant Document Chunks:\n"
                 for i, chunk in enumerate(chunks):
-                    rag_context += f"{i+1}. Document ID: {chunk['document_id']}, Chunk {chunk['chunk_index']}\n"
+                    metadata = doc_metadata.get(chunk["document_id"], {})
+                    source_name = metadata.get("filename") or chunk["document_id"]
+                    chunk["filename"] = metadata.get("filename")
+                    chunk["knowledge_space_id"] = metadata.get("knowledge_space_id")
+                    chunk["indexing_status"] = metadata.get("indexing_status")
+                    rag_context += f"{i+1}. Source: {source_name}, Chunk {chunk['chunk_index']}\n"
                     rag_context += f"   Content: {chunk['content'][:200]}...\n"
                     rag_context += f"   Similarity: {chunk['similarity']:.2f}\n"
                 rag_context += "\nUse the above document chunks to inform your response if relevant:\n"
@@ -173,22 +262,39 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                         doc_filter["user_email"] = user_email
                     if input.conversation_id:
                         doc_filter["conversation_id"] = input.conversation_id
+                    if input.knowledge_space_id:
+                        doc_filter["knowledge_space_id"] = input.knowledge_space_id
                     docs_cursor = db.documents.find(doc_filter).sort("created_at", -1)
                     latest_doc = await docs_cursor.to_list(1)
                     if latest_doc:
                         doc_id = latest_doc[0]["_id"]
-                        # Take first few chunks in order as context
                         raw_chunks = await db.document_chunks.find({"document_id": doc_id}).sort("chunk_index", 1).to_list(5)
                         if raw_chunks:
                             rag_chunks = [{
                                 "document_id": c.get("document_id"),
+                                "filename": latest_doc[0].get("filename"),
+                                "knowledge_space_id": latest_doc[0].get("knowledge_space_id"),
+                                "indexing_status": latest_doc[0].get("indexing_status"),
                                 "chunk_index": c.get("chunk_index"),
                                 "content": c.get("content", ""),
                                 "similarity": 1.0,
                             } for c in raw_chunks]
+                            await record_tool_audit(
+                                db,
+                                tool_id="file_search",
+                                current_user=current_user,
+                                conversation_id=input.conversation_id,
+                                status="fallback",
+                                latency_ms=int((perf_counter() - rag_started) * 1000),
+                                details={
+                                    "result_count": len(raw_chunks),
+                                    "knowledge_space_id": input.knowledge_space_id,
+                                    "document_id": doc_id,
+                                },
+                            )
                             rag_context = "\n\nDocument Content (raw chunks):\n"
                             for i, c in enumerate(rag_chunks):
-                                rag_context += f"{i+1}. Document ID: {c['document_id']}, Chunk {c['chunk_index']}\n"
+                                rag_context += f"{i+1}. Source: {c.get('filename') or c['document_id']}, Chunk {c['chunk_index']}\n"
                                 rag_context += f"   Content: {c['content'][:200]}...\n"
                             rag_context += "\nUse the above document content to summarize as requested.\n"
                             if payload["messages"]:
@@ -204,11 +310,29 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                     logger.warning(f"RAG fallback retrieval error: {e}")
                 # If still no rag_context after fallback, annotate the message minimally
                 if not rag_context:
+                    await record_tool_audit(
+                        db,
+                        tool_id="file_search",
+                        current_user=current_user,
+                        conversation_id=input.conversation_id,
+                        status="no_results",
+                        latency_ms=int((perf_counter() - rag_started) * 1000),
+                        details={"result_count": 0, "knowledge_space_id": input.knowledge_space_id},
+                    )
                     if payload["messages"]:
                         payload["messages"][-1]["content"] = "(No relevant documents found. Answering based on conversation history.)\n\n" + payload["messages"][-1]["content"]
                     else:
                         logger.warning("No messages found in payload, cannot set RAG no-results message")
         else:
+            await record_tool_audit(
+                db,
+                tool_id="file_search",
+                current_user=current_user,
+                conversation_id=input.conversation_id,
+                status="error",
+                latency_ms=int((perf_counter() - rag_started) * 1000),
+                details={"reason": "embedding_failed", "knowledge_space_id": input.knowledge_space_id},
+            )
             logger.warning("Failed to embed query for RAG.")
             # Check if payload["messages"] is not empty before accessing it
             if payload["messages"]:
@@ -224,7 +348,9 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
         # Signal web search start if needed
         if perform_search:
             yield f"data: <websearch>true</websearch>\n\n"
-            if search_context:
+            if search_failed:
+                yield f"data: <websearch>error</websearch>\n\n"
+            elif search_context:
                 yield f"data: <websearch>results</websearch>\n\n"
                 # Emit citations for web search
                 try:
@@ -254,6 +380,11 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                         rag_items = [{
                             "type": "rag",
                             "document_id": str(chunk.get('document_id')),
+                            "title": chunk.get('filename') or f"Document {chunk.get('document_id')}",
+                            "filename": chunk.get('filename'),
+                            "knowledge_space_id": chunk.get('knowledge_space_id'),
+                            "indexing_status": chunk.get('indexing_status'),
+                            "similarity": chunk.get('similarity'),
                             "chunk_index": chunk.get('chunk_index'),
                             "snippet": (chunk.get('content') or '')[:200]
                         } for chunk in rag_chunks]
@@ -311,7 +442,7 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                             success = True
                             break
                 except ClientDisconnect:
-                    print("Client disconnected. Stopping OpenAI stream.")
+                    logger.info("Client disconnected. Stopping OpenAI stream.")
                     return
                 except (httpx.RequestError, httpx.HTTPError) as e:
                     last_error = str(e)
@@ -326,8 +457,8 @@ async def chat_with_openai(input: StreamRequestPayload, request: Request, db=Dep
                 break
 
         if not success:
-            msg = last_error or "No LLM endpoint reachable. Ensure LM Studio is running at your configured LLM_BASE_URL."
-            yield f"data: {msg}\n\n"
+            logger.error(f"LLM stream failed: {last_error}")
+            yield "data: An error occurred while generating the response. Please try again later.\n\n"
             return
 
     headers = {
@@ -359,19 +490,26 @@ async def generate_title(messages: list, model: str):
         return "New Chat"
 
 @router.get("/models")
-async def get_models():
+@limiter.limit("30/minute")
+async def get_models(request: Request, current_user: User = Depends(get_current_user)):
+    return await fetch_models_from_llm()
+
+
+async def fetch_models_from_llm():
     try:
         base_url = config.llm_base_url
-        response = httpx.get(f"{base_url}/v1/models", timeout=10)
-        response.raise_for_status()
-        models_data = response.json()
-        return {"models": [model['id'] for model in models_data.get('data', [])]}
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(f"{base_url}/v1/models")
+            response.raise_for_status()
+            models_data = response.json()
+            return {"models": [model['id'] for model in models_data.get('data', [])]}
     except (httpx.RequestError, httpx.HTTPStatusError) as e:
         logger.error(f"Failed to fetch models from LLM service: {e}")
         return {"models": ["deepseek/deepseek-r1-0528-qwen3-8b"]}
 
 @router.get("/config")
-async def get_llm_config():
+@limiter.limit("30/minute")
+async def get_llm_config(request: Request, current_user: User = Depends(get_current_user)):
     """Expose LLM endpoint configuration (sanitized) for frontend visibility."""
     endpoints = []
     if config.llm_base_urls:
@@ -382,3 +520,23 @@ async def get_llm_config():
     elif config.llm_base_url:
         endpoints = [config.llm_base_url]
     return {"endpoints": endpoints}
+
+
+@router.get("/rag/config")
+@limiter.limit("30/minute")
+async def get_rag_config(request: Request, current_user: User = Depends(get_current_user)):
+    """Expose RAG configuration for frontend visibility."""
+    from backend.utils.rag import _get_embedding_model_info
+    try:
+        model_info = _get_embedding_model_info()
+    except Exception:
+        model_info = {"name": config.embedding_model_name, "embedding_dim": None}
+
+    return {
+        "embedding_model": model_info,
+        "vector_search_enabled": config.vector_search_enabled,
+        "hybrid_search_enabled": config.hybrid_search_enabled,
+        "similarity_threshold": config.rag_similarity_threshold,
+        "top_k": config.rag_top_k,
+        "mmr_lambda": config.rag_mmr_lambda,
+    }

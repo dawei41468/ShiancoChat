@@ -1,27 +1,89 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Form, Request, status
 from fastapi.responses import JSONResponse
 import os
 import tempfile
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from typing import Optional, cast
+# Lazy import to avoid loading heavy deps during test imports
+_RecursiveCharacterTextSplitter = None
+
+def _get_text_splitter():
+    global _RecursiveCharacterTextSplitter
+    if _RecursiveCharacterTextSplitter is None:
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        _RecursiveCharacterTextSplitter = RecursiveCharacterTextSplitter
+    return _RecursiveCharacterTextSplitter
+from typing import List, Optional, cast
 from pydantic import BaseModel
 from pathlib import Path
-from datetime import datetime, timedelta
-from sentence_transformers import SentenceTransformer
+from datetime import datetime, timedelta, timezone
 import numpy as np
-from backend.models import Document, DocumentChunk, User
+from backend.models import Document, DocumentChunk, KnowledgeSpace, KnowledgeSpaceCreate, KnowledgeSpaceUpdate, User, UserRole
 from backend.database import get_db
 from backend.auth import get_current_user
+from backend.rate_limiter import limiter
+from backend.utils.rag import embed_documents, _get_embedding_model
 import uuid
 
-# Initialize embedding model
-model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'all-MiniLM-L6-v2')
-embedding_model = SentenceTransformer(model_path)
+# Optional MIME type verification by magic bytes
+try:
+    import magic
+    _MAGIC_AVAILABLE = True
+except Exception:
+    _MAGIC_AVAILABLE = False
 
-# Python 3.12-friendly document extractors
-from pypdf import PdfReader
-from docx import Document as DocxDocument
-from openpyxl import load_workbook
+_ALLOWED_MIME_TYPES = {
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain',
+}
+
+_EXTENSION_TO_MIME = {
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.txt': 'text/plain',
+}
+
+def _verify_mime_type(content: bytes, ext: str) -> bool:
+    if not _MAGIC_AVAILABLE:
+        return True  # Graceful fallback if libmagic is unavailable
+    try:
+        detected = magic.from_buffer(content, mime=True)
+        if detected in _ALLOWED_MIME_TYPES:
+            return True
+        # Some systems detect .docx as application/octet-stream; allow expected mapping
+        expected = _EXTENSION_TO_MIME.get(ext)
+        if expected and detected == 'application/octet-stream' and ext in ('.docx', '.xlsx'):
+            return True
+        return False
+    except Exception:
+        return True  # Fail open on magic parsing errors
+
+# Python 3.12-friendly document extractors (lazy-loaded)
+_PdfReader = None
+_DocxDocument = None
+_load_workbook = None
+
+def _get_pdf_reader():
+    global _PdfReader
+    if _PdfReader is None:
+        from pypdf import PdfReader
+        _PdfReader = PdfReader
+    return _PdfReader
+
+def _get_docx_document():
+    global _DocxDocument
+    if _DocxDocument is None:
+        from docx import Document as DocxDocument
+        _DocxDocument = DocxDocument
+    return _DocxDocument
+
+def _get_load_workbook():
+    global _load_workbook
+    if _load_workbook is None:
+        from openpyxl import load_workbook
+        _load_workbook = load_workbook
+    return _load_workbook
 
 import logging
 logger = logging.getLogger(__name__)
@@ -49,35 +111,268 @@ class DocumentReference(BaseModel):
     document_id: str
     filename: str
     content_type: str
+    knowledge_space_id: Optional[str] = None
+
+class KnowledgeSpaceDetail(BaseModel):
+    space: KnowledgeSpace
+    documents: List[dict]
+
+async def _get_or_create_default_space(db, current_user: User) -> str:
+    existing = await db.knowledge_spaces.find_one({
+        "owner_email": current_user.email,
+        "scope": "user",
+        "name": "My Knowledge",
+    })
+    if existing:
+        return existing["id"]
+
+    now = datetime.now(timezone.utc)
+    space = KnowledgeSpace(
+        name="My Knowledge",
+        description="Personal documents and uploads",
+        owner_email=current_user.email,
+        scope="user",
+        created_at=now,
+        updated_at=now,
+    )
+    await db.knowledge_spaces.insert_one(space.dict())
+    return space.id
+
+async def _assert_space_access(db, current_user: User, knowledge_space_id: str) -> dict:
+    space = await db.knowledge_spaces.find_one({
+        "id": knowledge_space_id,
+        "owner_email": current_user.email,
+    })
+    if not space:
+        raise HTTPException(status_code=404, detail="Knowledge space not found")
+    return space
+
+@router.get("/spaces", response_model=List[KnowledgeSpace])
+@limiter.limit("60/minute")
+async def list_knowledge_spaces(
+    request: Request,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    spaces = await db.knowledge_spaces.find({
+        "owner_email": current_user.email,
+    }).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
+
+    if not spaces and skip == 0:
+        await _get_or_create_default_space(db, current_user)
+        spaces = await db.knowledge_spaces.find({
+            "owner_email": current_user.email,
+        }).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
+
+    return [KnowledgeSpace(**space) for space in spaces]
+
+@router.post("/spaces", response_model=KnowledgeSpace)
+@limiter.limit("20/minute")
+async def create_knowledge_space(
+    request: Request,
+    space_data: KnowledgeSpaceCreate,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    name = space_data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Knowledge space name is required")
+
+    existing = await db.knowledge_spaces.find_one({
+        "owner_email": current_user.email,
+        "name": name,
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="Knowledge space already exists")
+
+    now = datetime.now(timezone.utc)
+    space = KnowledgeSpace(
+        name=name,
+        description=space_data.description,
+        scope=space_data.scope,
+        owner_email=current_user.email,
+        created_at=now,
+        updated_at=now,
+    )
+    await db.knowledge_spaces.insert_one(space.dict())
+    return space
+
+@router.get("/spaces/{space_id}", response_model=KnowledgeSpaceDetail)
+@limiter.limit("60/minute")
+async def get_knowledge_space(
+    request: Request,
+    space_id: str,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    space_doc = await _assert_space_access(db, current_user, space_id)
+    documents = await db.documents.find({
+        "knowledge_space_id": space_id,
+        "user_email": current_user.email,
+    }).sort("created_at", -1).skip(skip).limit(limit).to_list(length=None)
+
+    return {
+        "space": KnowledgeSpace(**space_doc),
+        "documents": [{
+            "document_id": doc["_id"],
+            "filename": doc.get("filename", ""),
+            "content_type": doc.get("content_type", ""),
+            "chunk_count": doc.get("chunk_count", 0),
+            "created_at": doc.get("created_at"),
+            "expires_at": doc.get("expires_at"),
+            "indexing_status": doc.get("indexing_status", "pending"),
+        } for doc in documents],
+    }
+
+@router.patch("/spaces/{space_id}", response_model=KnowledgeSpace)
+@limiter.limit("20/minute")
+async def update_knowledge_space(
+    request: Request,
+    space_id: str,
+    space_data: KnowledgeSpaceUpdate,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    existing = await _assert_space_access(db, current_user, space_id)
+    if existing.get("name") == "My Knowledge" and existing.get("scope") == "user":
+        raise HTTPException(status_code=400, detail="Default knowledge space cannot be modified")
+    update_data = {}
+
+    if space_data.name is not None:
+        name = space_data.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Knowledge space name is required")
+        duplicate = await db.knowledge_spaces.find_one({
+            "owner_email": current_user.email,
+            "name": name,
+            "id": {"$ne": space_id},
+        })
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Knowledge space already exists")
+        update_data["name"] = name
+
+    if space_data.description is not None:
+        update_data["description"] = space_data.description
+
+    if not update_data:
+        return KnowledgeSpace(**existing)
+
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    await db.knowledge_spaces.update_one(
+        {"id": space_id, "owner_email": current_user.email},
+        {"$set": update_data}
+    )
+    updated = await db.knowledge_spaces.find_one({"id": space_id, "owner_email": current_user.email})
+    return KnowledgeSpace(**updated)
+
+@router.delete("/spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def delete_knowledge_space(
+    request: Request,
+    space_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    space = await _assert_space_access(db, current_user, space_id)
+    if space.get("name") == "My Knowledge" and space.get("scope") == "user":
+        raise HTTPException(status_code=400, detail="Default knowledge space cannot be deleted")
+
+    documents = await db.documents.find({
+        "knowledge_space_id": space_id,
+        "user_email": current_user.email,
+    }).to_list(length=None)
+    document_ids = [doc["_id"] for doc in documents]
+    if document_ids:
+        await db.document_chunks.delete_many({"document_id": {"$in": document_ids}})
+        await db.documents.delete_many({"_id": {"$in": document_ids}, "user_email": current_user.email})
+
+    await db.knowledge_spaces.delete_one({"id": space_id, "owner_email": current_user.email})
+    return None
+
+@router.get("/spaces/{space_id}/documents", response_model=List[dict])
+@limiter.limit("60/minute")
+async def list_knowledge_space_documents(
+    request: Request,
+    space_id: str,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    await _assert_space_access(db, current_user, space_id)
+    documents = await db.documents.find({
+        "knowledge_space_id": space_id,
+        "user_email": current_user.email,
+    }).sort("created_at", -1).skip(skip).limit(limit).to_list(length=None)
+    return [{
+        "document_id": doc["_id"],
+        "filename": doc.get("filename", ""),
+        "content_type": doc.get("content_type", ""),
+        "chunk_count": doc.get("chunk_count", 0),
+        "created_at": doc.get("created_at"),
+        "expires_at": doc.get("expires_at"),
+        "indexing_status": doc.get("indexing_status", "pending"),
+    } for doc in documents]
 
 @router.post("")
-async def save_document_reference(document_ref: DocumentReference):
+@limiter.limit("30/minute")
+async def save_document_reference(
+    request: Request,
+    document_ref: DocumentReference,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Save document reference without processing content"""
-    db = await get_db()
-    
-    # Check if document exists
-    existing = await db.documents.find_one({"_id": document_ref.document_id})
+    existing = await db.documents.find_one({
+        "_id": document_ref.document_id,
+        "user_email": current_user.email,
+    })
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    conversation = await db.conversations.find_one({
+        "id": document_ref.conversation_id,
+        "user_email": current_user.email,
+    })
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found or not owned by user")
     
     # Update document with reference info
     await db.documents.update_one(
-        {"_id": document_ref.document_id},
+        {"_id": document_ref.document_id, "user_email": current_user.email},
         {"$set": {
             "conversation_id": document_ref.conversation_id,
             "filename": document_ref.filename,
-            "content_type": document_ref.content_type
+            "content_type": document_ref.content_type,
+            "knowledge_space_id": document_ref.knowledge_space_id or existing.get("knowledge_space_id"),
+        }}
+    )
+
+    await db.document_chunks.update_many(
+        {"document_id": document_ref.document_id},
+        {"$set": {
+            "user_email": current_user.email,
+            "conversation_id": document_ref.conversation_id,
+            "knowledge_space_id": document_ref.knowledge_space_id or existing.get("knowledge_space_id"),
         }}
     )
     
     return {"status": "success", "document_id": document_ref.document_id}
 
 @router.post("/upload")
+@limiter.limit("20/minute")
 async def upload_file(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    conversation_id: Optional[str] = Form(None)
+    conversation_id: Optional[str] = Form(None),
+    knowledge_space_id: Optional[str] = Form(None),
+    db=Depends(get_db),
 ):
     """Handle file upload and text extraction"""
     tmp_file_path = None  # Initialize before try block
@@ -89,6 +384,19 @@ async def upload_file(
     ext = filepath.suffix.lower()
     if ext not in ['.pdf', '.docx', '.txt', '.xlsx']:
         raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    if conversation_id:
+        conversation = await db.conversations.find_one({
+            "id": conversation_id,
+            "user_email": current_user.email,
+        })
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found or not owned by user")
+
+    if knowledge_space_id:
+        await _assert_space_access(db, current_user, knowledge_space_id)
+    else:
+        knowledge_space_id = await _get_or_create_default_space(db, current_user)
     
     try:
         # Save file temporarily
@@ -96,6 +404,11 @@ async def upload_file(
             content = await file.read()
             if len(content) > 10 * 1024 * 1024:  # 10MB limit
                 raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+            if not _verify_mime_type(content, ext):
+                raise HTTPException(
+                    status_code=400,
+                    detail="File content does not match the declared type. Possible spoofed extension."
+                )
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
         
@@ -104,14 +417,14 @@ async def upload_file(
             try:
                 if ext == '.pdf':
                     text_parts = []
-                    reader = PdfReader(path)
+                    reader = _get_pdf_reader()(path)
                     for page in reader.pages:
                         page_text = page.extract_text() or ''
                         if page_text:
                             text_parts.append(page_text)
                     return '\n'.join(text_parts)
                 elif ext == '.docx':
-                    doc = DocxDocument(path)
+                    doc = _get_docx_document()(path)
                     paras = [p.text for p in doc.paragraphs if p.text]
                     # Extract text from tables as well
                     for table in getattr(doc, 'tables', []):
@@ -119,7 +432,7 @@ async def upload_file(
                             paras.append('\t'.join(cell.text for cell in row.cells))
                     return '\n'.join(paras)
                 elif ext == '.xlsx':
-                    wb = load_workbook(path, data_only=True)
+                    wb = _get_load_workbook()(path, data_only=True)
                     lines = []
                     for ws in wb.worksheets:
                         for row in ws.iter_rows(values_only=True):
@@ -141,7 +454,8 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="Could not extract text from the uploaded file.")
         
         # Chunk text for better handling
-        text_splitter = RecursiveCharacterTextSplitter(
+        TextSplitter = _get_text_splitter()
+        text_splitter = TextSplitter(
             chunk_size=1000,
             chunk_overlap=200
         )
@@ -149,20 +463,20 @@ async def upload_file(
         
         # Create document record
         document_id = str(uuid.uuid4())
-        expires_at = datetime.utcnow() + timedelta(hours=DOCUMENT_TTL_HOURS)
-        db = await get_db()
-
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=DOCUMENT_TTL_HOURS)
         # Store document and chunks without embeddings first
         document = {
             "_id": document_id,
             "filename": file.filename,
             "user_email": current_user.email,
+            "knowledge_space_id": knowledge_space_id,
             "content": text,
             "content_type": file.content_type or "application/octet-stream",
             "expires_at": expires_at,
             "conversation_id": conversation_id,
-            "created_at": datetime.utcnow(),
-            "chunk_count": len(chunks)
+            "created_at": datetime.now(timezone.utc),
+            "chunk_count": len(chunks),
+            "indexing_status": "pending",
         }
 
         # Insert document and then chunks (embeddings to be added in background)
@@ -171,10 +485,13 @@ async def upload_file(
             await db.document_chunks.insert_many([
                 {
                     "document_id": document_id,
+                    "knowledge_space_id": knowledge_space_id,
                     "chunk_index": i,
                     "content": chunk,
                     "embedding": None,
-                    "created_at": datetime.utcnow()
+                    "user_email": current_user.email,
+                    "conversation_id": conversation_id,
+                    "created_at": datetime.now(timezone.utc)
                 } for i, chunk in enumerate(chunks)
             ])
         
@@ -192,23 +509,33 @@ async def upload_file(
             "content": text,
             "content_type": file.content_type,
             "document_id": document_id,
+            "knowledge_space_id": knowledge_space_id,
             "expires_at": expires_at.isoformat()
         })
         
+    except HTTPException:
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            try:
+                os.unlink(tmp_file_path)
+            except OSError:
+                pass
+        raise
     except Exception as e:
         # Clean up if error occurs
         if tmp_file_path and os.path.exists(tmp_file_path):
             try:
                 os.unlink(tmp_file_path)
-            except:
+            except OSError:
                 pass
+        logger.error(f"Error processing upload: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing file: {str(e)}"
+            detail="An error occurred while processing the file. Please try again later."
         )
 
 @router.get("/{document_id}", response_model=DocumentResponse)
-async def get_document(document_id: str, current_user: User = Depends(get_current_user)):
+@limiter.limit("60/minute")
+async def get_document(request: Request, document_id: str, current_user: User = Depends(get_current_user)):
     """Fetch a document by ID for the current user"""
     db = await get_db()
     doc = await db.documents.find_one({"_id": document_id, "user_email": current_user.email})
@@ -223,7 +550,8 @@ async def get_document(document_id: str, current_user: User = Depends(get_curren
     )
 
 @router.delete("/{document_id}")
-async def delete_document(document_id: str, current_user: User = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def delete_document(request: Request, document_id: str, current_user: User = Depends(get_current_user)):
     """Delete a document by ID"""
     db = await get_db()
     # Delete document and its chunks
@@ -237,10 +565,16 @@ async def delete_document(document_id: str, current_user: User = Depends(get_cur
     return {"status": "success"}
 
 @router.post("/cleanup")
-async def cleanup_documents():
+@limiter.limit("10/minute")
+async def cleanup_documents(request: Request, current_user: User = Depends(get_current_user)):
     """Clean up expired documents"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to clean up documents",
+        )
     db = await get_db()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     # Find expired documents
     expired_docs = await db.documents.find({
@@ -258,24 +592,80 @@ async def cleanup_documents():
     
     return {"status": "success", "deleted": len(doc_ids)}
 
-async def compute_embeddings(db, document_id: str, chunks: list):
-    """Background task to compute and update chunk embeddings"""
+async def compute_embeddings(db, document_id: str, chunks: list, max_retries: int = 3):
+    """Background task to compute and update chunk embeddings with retry."""
+    import asyncio
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            # Use the shared embed_documents function for consistency
+            chunk_embeddings = await embed_documents(chunks)
+
+            if not chunk_embeddings:
+                logger.error("No embeddings generated for chunks")
+                await db.documents.update_one(
+                    {"_id": document_id},
+                    {"$set": {"indexing_status": "failed"}}
+                )
+                return
+
+            # Update chunks with embeddings
+            from pymongo import UpdateOne
+            operations = [
+                UpdateOne(
+                    {"document_id": document_id, "chunk_index": i},
+                    {"$set": {"embedding": embedding}}
+                ) for i, embedding in enumerate(chunk_embeddings)
+            ]
+
+            if operations:
+                await db.document_chunks.bulk_write(operations)
+                await db.documents.update_one(
+                    {"_id": document_id},
+                    {"$set": {"indexing_status": "indexed"}}
+                )
+                logger.info(f"Computed and stored {len(operations)} embeddings for document {document_id}")
+                return
+        except Exception as e:
+            last_error = e
+            logger.error(f"Embedding attempt {attempt + 1}/{max_retries} failed for document {document_id}: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)  # exponential backoff: 1s, 2s, 4s
+
+    # All retries exhausted
+    logger.error(f"Embedding failed permanently for document {document_id}: {last_error}")
     try:
-        # Encode all chunks in a single batch for efficiency, returning numpy array.
-        embeddings = cast(np.ndarray, embedding_model.encode(chunks, convert_to_tensor=False))
-        # The result is a 2D numpy array, convert to list of 1D lists.
-        chunk_embeddings = embeddings.tolist()
-        
-        # Update chunks with embeddings
-        from pymongo import UpdateOne
-        operations = [
-            UpdateOne(
-                {"document_id": document_id, "chunk_index": i},
-                {"$set": {"embedding": embedding}}
-            ) for i, embedding in enumerate(chunk_embeddings)
-        ]
-        
-        if operations:
-            await db.document_chunks.bulk_write(operations)
-    except Exception as e:
-        logger.error(f"Error in background embedding task: {str(e)}")
+        await db.documents.update_one(
+            {"_id": document_id},
+            {"$set": {"indexing_status": "failed"}}
+        )
+    except Exception as db_err:
+        logger.error(f"Failed to update document status to failed: {db_err}")
+
+
+@router.get("/dead-letter")
+@limiter.limit("30/minute")
+async def list_dead_letter_documents(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """List documents that failed embedding permanently (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view dead-letter documents"
+        )
+    failed_docs = await db.documents.find(
+        {"indexing_status": "failed"}
+    ).sort("created_at", -1).to_list(length=None)
+    return {
+        "documents": [{
+            "document_id": doc["_id"],
+            "filename": doc.get("filename", ""),
+            "user_email": doc.get("user_email", ""),
+            "knowledge_space_id": doc.get("knowledge_space_id"),
+            "created_at": doc.get("created_at"),
+            "chunk_count": doc.get("chunk_count", 0),
+        } for doc in failed_docs]
+    }
