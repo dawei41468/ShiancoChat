@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: test_secret_key_that_is_at_least_32_chars_long
+      MONGO_URL: mongodb://localhost:27017
+      DB_NAME: shiancochat_test
+      LLM_BASE_URL: http://localhost:1234
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run backend dependency audit
+        run: |
+          pip install pip-audit
+          pip-audit --desc --format=markdown -r backend/requirements.txt || true
+      - name: Run backend tests
+        run: pytest -q backend/tests
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+      - name: Run frontend dependency audit
+        run: npm audit --audit-level=moderate || true
+      - name: Run frontend tests
+        run: yarn test --watchAll=false --coverage
+      - name: Build frontend
+        run: yarn build
