@@ -1,94 +1,165 @@
 # ShiancoChat
 
-ShiancoChat is an interactive chat application powered by a local Large Language Model (LLM). It features real-time chat, conversation history management, dark/light mode theming, and multi-language support (English and Chinese).
+ShiancoChat is a full-stack chat application powered by Large Language Models (LLMs). It features real-time streaming chat, conversation history management, document upload with RAG (Retrieval-Augmented Generation), web search, dark/light mode theming, and multi-language support (English and Chinese).
 
 ## Features
 
-*   **Interactive Chat:** Engage in real-time conversations with a local LLM.
-*   **Conversation Management:** Create new chats, view recent conversations, rename, and delete existing ones.
-*   **Theming:** Switch between dark and light modes for a personalized experience.
-*   **Multi-language Support:** UI available in English and Chinese.
-*   **LLM Integration:** Connects with a local DeepSeek-R1 distilled model served via LM Studio.
+- **Interactive Chat:** Engage in real-time conversations with local or remote LLMs.
+- **Streaming Responses:** See responses generate token-by-token with reasoning visibility.
+- **Conversation Management:** Create, view, rename, and delete conversations.
+- **Document Upload & RAG:** Upload PDF, DOCX, and TXT files for knowledge-grounded answers.
+- **Web Search:** Augment answers with live web search results.
+- **Theming:** Switch between dark and light modes.
+- **Multi-language Support:** UI available in English and Chinese.
+- **Multi-Provider LLM Support:** Connect to OpenAI-compatible APIs (LM Studio, vLLM) or Ollama.
+
+## Tech Stack
+
+- **Frontend:** React 19, Tailwind CSS, Craco, Yarn
+- **Backend:** FastAPI, Python 3.12, Motor (async MongoDB driver)
+- **Database:** MongoDB (local or Atlas)
+- **LLM Integration:** OpenAI-compatible APIs, Ollama
+
+## Prerequisites
+
+- **Node.js** 20+ and **Yarn** 1.x (frontend)
+- **Python** 3.12+ and **pip** (backend)
+- **MongoDB** 5.0+ (local or Atlas)
+- An **LLM server** such as:
+  - [LM Studio](https://lmstudio.ai/) (OpenAI-compatible local server)
+  - [Ollama](https://ollama.com/) (local model runner)
+  - Any OpenAI-compatible API endpoint
 
 ## Setup and Installation
 
-To get ShiancoChat up and running on your local machine, follow these steps:
-
-### Prerequisites
-
-*   **Node.js and Yarn:** For the frontend.
-*   **Python 3.8+ and pip:** For the backend.
-*   **MongoDB:** A running MongoDB instance (local or cloud-hosted).
-*   **LM Studio:** To serve the local DeepSeek-R1 distilled model.
-
 ### 1. Backend Setup
 
-1.  **Navigate to the backend directory:**
-    ```bash
-    cd backend
-    ```
-2.  **Create a virtual environment (recommended):**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  **Configure environment variables:**
-    Create a `.env` file in the `backend/` directory with the following content:
-    ```
-    MONGO_URL=your_mongodb_connection_string
-    DB_NAME=shiancochat_db
-    LLM_BASE_URL=http://localhost:1234 # Or your LM Studio server address
-    PORT=4100 # Or your desired backend port
-    ```
-    *Replace `your_mongodb_connection_string` with your actual MongoDB connection string.*
-5.  **Run the backend server:**
-    ```bash
-    uvicorn server:app --host 0.0.0.0 --port 4100 --reload
-    ```
-    The backend server should now be running on `http://localhost:4100`.
+```bash
+cd backend
+
+# Create a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+**Configure environment variables:**
+
+```bash
+cp .env.example .env
+# Edit .env with your settings (MongoDB URL, LLM base URL, secret key, etc.)
+```
+
+**Run the backend server:**
+
+```bash
+uvicorn server:app --host 0.0.0.0 --port 4100 --reload
+```
+
+The API will be available at `http://localhost:4100`.
 
 ### 2. Frontend Setup
 
-1.  **Navigate to the frontend directory:**
-    ```bash
-    cd frontend
-    ```
-2.  **Install dependencies:**
-    ```bash
-    yarn install
-    ```
-3.  **Configure environment variables:**
-    Create a `.env` file in the `frontend/` directory with the following content:
-    ```
-    REACT_APP_BACKEND_URL=http://localhost:4100 # Or your backend server address
-    ```
-4.  **Run the frontend development server:**
-    ```bash
-    yarn start
-    ```
-    The frontend application should now be accessible at `http://localhost:4141` (or another port if 4141 is in use).
+```bash
+cd frontend
 
-### 3. LM Studio Setup
+# Install dependencies
+yarn install
+```
 
-1.  **Download and Install LM Studio:** Get it from [LM Studio website](https://lmstudio.ai/).
-2.  **Download the DeepSeek-R1 distilled model:**
-    *   Open LM Studio.
-    *   Go to the "Search" tab.
-    *   Search for `deepseek/deepseek-r1-0528-qwen3-8b` and download it.
-3.  **Load and Serve the Model:**
-    *   Go to the "My Models" tab.
-    *   Select the downloaded `deepseek/deepseek-r1-0528-qwen3-8b` model.
-    *   Go to the "Local Inference Server" tab (usually the `>` icon on the left sidebar).
-    *   Click "Start Server". Ensure the server is running on `http://localhost:1234` (or the URL configured in your backend's `.env` file).
+**Configure environment variables:**
 
-## Usage
+```bash
+cp .env.example .env
+# Edit .env if your backend runs on a different host/port
+```
 
-Once both the backend and frontend servers are running, open your web browser and navigate to `http://localhost:4141`. You can start a new chat, send messages, and interact with the local LLM.
+**Run the frontend development server:**
 
-## Project Analysis
+```bash
+yarn start
+```
 
-For a detailed analysis of the project's architecture, tech stack, completed features, and remaining tasks, please refer to the `PROJECT_ANALYSIS.md` file in the root directory of this repository.
+The app will be available at `http://localhost:4141`.
+
+### 3. LLM Server Setup (LM Studio Example)
+
+1. Download and install [LM Studio](https://lmstudio.ai/).
+2. Download a model (e.g., `deepseek/deepseek-r1-0528-qwen3-8b`).
+3. Go to the **Local Inference Server** tab and click **Start Server**.
+4. Ensure the server is running on the URL configured in your backend `.env` (default: `http://localhost:1234`).
+
+## Testing
+
+### Backend Tests
+
+The backend test suite uses `pytest` with `mongomock-motor` for an in-memory MongoDB and mocks all external services (LLM, embeddings, web search). **No live MongoDB or LLM is required.**
+
+```bash
+cd backend
+source venv/bin/activate
+pytest tests/ -q
+```
+
+### Frontend Tests
+
+The frontend test suite uses Jest and React Testing Library.
+
+```bash
+cd frontend
+yarn test --watchAll=false
+```
+
+Run with coverage:
+
+```bash
+yarn test --watchAll=false --coverage
+```
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- **Backend tests** run on every PR and push to `main`.
+- **Frontend tests** and **frontend build** are validated on every PR and push to `main`.
+
+See `.github/workflows/ci.yml` for details.
+
+## Production Deployment Assumptions
+
+- **MongoDB:** Use MongoDB Atlas (M10+ recommended) or a managed MongoDB instance. Atlas Vector Search can be enabled for scalable semantic search.
+- **Secret Management:** Generate a strong `SECRET_KEY` (at least 32 random characters) and rotate it periodically. Never commit secrets to version control.
+- **CORS:** Configure `ALLOWED_HOSTS` and CORS settings to match your production domain.
+- **HTTPS:** Always serve the application over HTTPS in production.
+- **Rate Limiting:** The backend includes per-user rate limiting. Ensure your reverse proxy (e.g., Nginx, Traefik, Cloudflare) does not inadvertently bypass it.
+- **Environment:** Set `ENVIRONMENT=production` and `DEBUG=False` in production.
+- **LLM Endpoint:** Use a reliable, high-availability LLM API or local inference cluster.
+
+## Project Structure
+
+```
+.
+├── backend/              # FastAPI backend
+│   ├── routers/          # API route handlers
+│   ├── services/         # Business logic
+│   ├── models/           # Pydantic/MongoDB models
+│   ├── tests/            # Pytest test suite
+│   └── requirements.txt  # Python dependencies
+├── frontend/             # React frontend
+│   ├── src/              # Source code
+│   │   ├── components/   # React components
+│   │   ├── services/     # API client
+│   │   └── *.test.js     # Jest tests
+│   └── package.json      # Node dependencies (Yarn)
+└── .github/workflows/    # CI/CD configuration
+```
+
+## Current Priorities
+
+The project is in **Phase 8: Production Hardening**. See [`docs/AUDIT_FINDINGS.md`](docs/AUDIT_FINDINGS.md) for the comprehensive audit report and [`docs/PLAN.md`](docs/PLAN.md) for the implementation roadmap.
+
+## License
+
+[Add your license here]
