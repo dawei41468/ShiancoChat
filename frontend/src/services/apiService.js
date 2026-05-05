@@ -141,12 +141,6 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        if (!localStorage.getItem('refresh_token')) {
-          localStorage.removeItem('access_token');
-          setAuthHeader(null);
-          window.dispatchEvent(new Event('auth:session-expired'));
-          return Promise.reject(error);
-        }
         const access_token = await refreshAccessToken();
         originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
         return apiClient(originalRequest);

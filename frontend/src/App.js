@@ -72,7 +72,7 @@ function App() {
  * @returns {JSX.Element}
  */
 const ProtectedRoute = () => {
-  const { token, isLoading } = useContext(AuthContext);
+  const { user, isLoading } = useContext(AuthContext);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   if (isLoading) {
@@ -83,7 +83,7 @@ const ProtectedRoute = () => {
     );
   }
 
-  if (!token) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
