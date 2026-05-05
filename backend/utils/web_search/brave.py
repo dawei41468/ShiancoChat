@@ -17,7 +17,7 @@ class BraveEngine(SearchEngine):
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    async def search(self, query: str, max_results: int = 5, timeout: int = 10) -> List[SearchResult]:
+    async def search(self, query: str, max_results: int = 5, timeout: int = 5) -> List[SearchResult]:
         try:
             api_key = os.getenv("BRAVE_API_KEY")
             if not api_key:

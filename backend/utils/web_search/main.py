@@ -118,29 +118,9 @@ async def perform_web_search(
                 logger.info(f"Engine {selected_engines[i]} returned {len(valid_results)} valid results")
                 raw_results.extend(valid_results)
         
-        # If no results from selected engines, try a best-effort fallback
-        if not raw_results:
-            # Prefer trying an engine that wasn't selected but is readily available
-            try:
-                # If Brave key is present, try Brave once
-                if os.getenv("BRAVE_API_KEY"):
-                    try:
-                        from .brave import BraveEngine  # type: ignore
-                        logger.info("No results; attempting Brave fallback")
-                        brave_results = await BraveEngine().search(query, max_results + 2)
-                        raw_results.extend(brave_results)
-                    except Exception as e:
-                        logger.warning(f"Brave fallback failed: {e}")
-                # If still empty and ddg wasn't selected, try ddg once
-                if not raw_results and "duckduckgo" not in selected_engines:
-                    logger.info("No results; attempting DuckDuckGo fallback")
-                    try:
-                        ddg_results = await DuckDuckGoEngine().search(query, max_results + 2)
-                        raw_results.extend(ddg_results)
-                    except Exception as e:
-                        logger.error(f"DuckDuckGo fallback failed: {e}")
-            except Exception:
-                pass
+        # Skip slow fallback chain: if primary engines failed, fail fast rather
+        # than retrying the same engines or falling back to known-blocked ones.
+        # This keeps chat responsive when the proxy/VPN blocks search.
         
         # Apply domain filter if specified
         if domain_filter:
