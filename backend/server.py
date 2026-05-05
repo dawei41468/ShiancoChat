@@ -39,13 +39,8 @@ load_dotenv(ROOT_DIR / 'backend' / '.env', verbose=False)
 # Set tokenizers parallelism to avoid warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# Only log environment variables if we're the main process (not reloader)
-if os.environ.get('RUN_MAIN') == 'true' or not os.environ.get('WERKZEUG_RUN_MAIN'):
-    from backend.database import close_mongo_connection, db
-else:
-    from backend.database import close_mongo_connection, init_client_with_retry
+from backend.database import close_mongo_connection, init_client_with_retry, init_indexes, get_db
 from backend.routers import chat, openai, auth, users, documents, tools
-from backend.database import init_indexes, get_db
 from backend.auth import get_current_user
 from backend.models import User
 logger.info(f"Imported routers: {[r.__name__ for r in [chat, openai, auth, users, documents, tools]]}")
