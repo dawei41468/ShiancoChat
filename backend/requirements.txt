@@ -9,7 +9,7 @@ passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
 httpx==0.25.2
 slowapi==0.1.9
-pydantic==2.8.2
+pydantic==2.13.5
 pydantic-settings==2.0.3
 
 # AI/ML dependencies
