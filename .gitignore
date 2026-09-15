@@ -98,3 +98,7 @@ backend/models/
 
 # AI assistant tooling (local, per-developer)
 .mimocode/
+.roo/
+
+# Platform scaffolding debris
+.gitconfig
