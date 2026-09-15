@@ -8,7 +8,10 @@ _RecursiveCharacterTextSplitter = None
 def _get_text_splitter():
     global _RecursiveCharacterTextSplitter
     if _RecursiveCharacterTextSplitter is None:
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        try:
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+        except ImportError:  # legacy langchain<0.2 layout
+            from langchain.text_splitter import RecursiveCharacterTextSplitter
         _RecursiveCharacterTextSplitter = RecursiveCharacterTextSplitter
     return _RecursiveCharacterTextSplitter
 from typing import List, Optional, cast
@@ -104,7 +107,7 @@ class DocumentResponse(BaseModel):
     content: str
     content_type: str
     document_id: str
-    expires_at: datetime
+    expires_at: Optional[datetime] = None
 
 class DocumentReference(BaseModel):
     conversation_id: str
@@ -138,14 +141,30 @@ async def _get_or_create_default_space(db, current_user: User) -> str:
     await db.knowledge_spaces.insert_one(space.dict())
     return space.id
 
+def _department_value(user: User) -> Optional[str]:
+    """Return the raw department string for a user (Department is a str enum)."""
+    dept = getattr(user, "department", None)
+    return getattr(dept, "value", dept)
+
+
 async def _assert_space_access(db, current_user: User, knowledge_space_id: str) -> dict:
-    space = await db.knowledge_spaces.find_one({
-        "id": knowledge_space_id,
-        "owner_email": current_user.email,
-    })
+    """Fetch a space and verify the user may access it.
+
+    Access: space owner, department member (department-scoped spaces), or admin.
+    All denials return 404 to avoid leaking space existence.
+    """
+    space = await db.knowledge_spaces.find_one({"id": knowledge_space_id})
     if not space:
         raise HTTPException(status_code=404, detail="Knowledge space not found")
-    return space
+    if current_user.role == UserRole.ADMIN:
+        return space
+    if space.get("owner_email") == current_user.email:
+        return space
+    if (space.get("scope") == "department"
+            and space.get("department")
+            and space.get("department") == _department_value(current_user)):
+        return space
+    raise HTTPException(status_code=404, detail="Knowledge space not found")
 
 @router.get("/spaces", response_model=List[KnowledgeSpace])
 @limiter.limit("60/minute")
@@ -156,15 +175,18 @@ async def list_knowledge_spaces(
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
 ):
-    spaces = await db.knowledge_spaces.find({
-        "owner_email": current_user.email,
-    }).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
+    visibility_filter = {
+        "$or": [
+            {"owner_email": current_user.email},
+            {"scope": "department", "department": _department_value(current_user)},
+        ]
+    }
+    spaces = await db.knowledge_spaces.find(visibility_filter).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
 
-    if not spaces and skip == 0:
+    # Auto-create the personal default space when the user has none of their own
+    if skip == 0 and not any(s.get("owner_email") == current_user.email for s in spaces):
         await _get_or_create_default_space(db, current_user)
-        spaces = await db.knowledge_spaces.find({
-            "owner_email": current_user.email,
-        }).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
+        spaces = await db.knowledge_spaces.find(visibility_filter).sort("updated_at", -1).skip(skip).limit(limit).to_list(length=None)
 
     return [KnowledgeSpace(**space) for space in spaces]
 
@@ -180,10 +202,24 @@ async def create_knowledge_space(
     if not name:
         raise HTTPException(status_code=400, detail="Knowledge space name is required")
 
-    existing = await db.knowledge_spaces.find_one({
-        "owner_email": current_user.email,
-        "name": name,
-    })
+    scope = space_data.scope or "user"
+    if scope == "department":
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Only admins can create department spaces")
+        if not space_data.department:
+            raise HTTPException(status_code=400, detail="Department is required for department-scoped spaces")
+        existing = await db.knowledge_spaces.find_one({
+            "scope": "department",
+            "department": getattr(space_data.department, "value", space_data.department),
+            "name": name,
+        })
+    elif scope == "user":
+        existing = await db.knowledge_spaces.find_one({
+            "owner_email": current_user.email,
+            "name": name,
+        })
+    else:
+        raise HTTPException(status_code=400, detail="Invalid scope")
     if existing:
         raise HTTPException(status_code=400, detail="Knowledge space already exists")
 
@@ -191,7 +227,8 @@ async def create_knowledge_space(
     space = KnowledgeSpace(
         name=name,
         description=space_data.description,
-        scope=space_data.scope,
+        scope=scope,
+        department=space_data.department if scope == "department" else None,
         owner_email=current_user.email,
         created_at=now,
         updated_at=now,
@@ -212,7 +249,6 @@ async def get_knowledge_space(
     space_doc = await _assert_space_access(db, current_user, space_id)
     documents = await db.documents.find({
         "knowledge_space_id": space_id,
-        "user_email": current_user.email,
     }).sort("created_at", -1).skip(skip).limit(limit).to_list(length=None)
 
     return {
@@ -238,6 +274,8 @@ async def update_knowledge_space(
     db=Depends(get_db),
 ):
     existing = await _assert_space_access(db, current_user, space_id)
+    if existing.get("scope") == "department" and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can modify department spaces")
     if existing.get("name") == "My Knowledge" and existing.get("scope") == "user":
         raise HTTPException(status_code=400, detail="Default knowledge space cannot be modified")
     update_data = {}
@@ -246,11 +284,13 @@ async def update_knowledge_space(
         name = space_data.name.strip()
         if not name:
             raise HTTPException(status_code=400, detail="Knowledge space name is required")
-        duplicate = await db.knowledge_spaces.find_one({
-            "owner_email": current_user.email,
-            "name": name,
-            "id": {"$ne": space_id},
-        })
+        dup_filter = {"name": name, "id": {"$ne": space_id}}
+        if existing.get("scope") == "department":
+            dup_filter["scope"] = "department"
+            dup_filter["department"] = existing.get("department")
+        else:
+            dup_filter["owner_email"] = current_user.email
+        duplicate = await db.knowledge_spaces.find_one(dup_filter)
         if duplicate:
             raise HTTPException(status_code=400, detail="Knowledge space already exists")
         update_data["name"] = name
@@ -262,11 +302,8 @@ async def update_knowledge_space(
         return KnowledgeSpace(**existing)
 
     update_data["updated_at"] = datetime.now(timezone.utc)
-    await db.knowledge_spaces.update_one(
-        {"id": space_id, "owner_email": current_user.email},
-        {"$set": update_data}
-    )
-    updated = await db.knowledge_spaces.find_one({"id": space_id, "owner_email": current_user.email})
+    await db.knowledge_spaces.update_one({"id": space_id}, {"$set": update_data})
+    updated = await db.knowledge_spaces.find_one({"id": space_id})
     return KnowledgeSpace(**updated)
 
 @router.delete("/spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,19 +315,19 @@ async def delete_knowledge_space(
     db=Depends(get_db),
 ):
     space = await _assert_space_access(db, current_user, space_id)
+    if space.get("scope") == "department" and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete department spaces")
     if space.get("name") == "My Knowledge" and space.get("scope") == "user":
         raise HTTPException(status_code=400, detail="Default knowledge space cannot be deleted")
 
-    documents = await db.documents.find({
-        "knowledge_space_id": space_id,
-        "user_email": current_user.email,
-    }).to_list(length=None)
+    # Delete every document in the space regardless of uploader
+    documents = await db.documents.find({"knowledge_space_id": space_id}).to_list(length=None)
     document_ids = [doc["_id"] for doc in documents]
     if document_ids:
         await db.document_chunks.delete_many({"document_id": {"$in": document_ids}})
-        await db.documents.delete_many({"_id": {"$in": document_ids}, "user_email": current_user.email})
+        await db.documents.delete_many({"_id": {"$in": document_ids}})
 
-    await db.knowledge_spaces.delete_one({"id": space_id, "owner_email": current_user.email})
+    await db.knowledge_spaces.delete_one({"id": space_id})
     return None
 
 @router.get("/spaces/{space_id}/documents", response_model=List[dict])
@@ -306,7 +343,6 @@ async def list_knowledge_space_documents(
     await _assert_space_access(db, current_user, space_id)
     documents = await db.documents.find({
         "knowledge_space_id": space_id,
-        "user_email": current_user.email,
     }).sort("created_at", -1).skip(skip).limit(limit).to_list(length=None)
     return [{
         "document_id": doc["_id"],
@@ -349,6 +385,8 @@ async def save_document_reference(
             "filename": document_ref.filename,
             "content_type": document_ref.content_type,
             "knowledge_space_id": document_ref.knowledge_space_id or existing.get("knowledge_space_id"),
+            # Attaching a document to a knowledge space persists it (clears TTL)
+            "expires_at": None if (document_ref.knowledge_space_id or existing.get("knowledge_space_id")) else existing.get("expires_at"),
         }}
     )
 
@@ -461,9 +499,13 @@ async def upload_file(
         )
         chunks = text_splitter.split_text(text)
         
-        # Create document record
+        # Create document record. Conversation attachments are ad-hoc and expire;
+        # documents uploaded straight into a knowledge space library persist.
         document_id = str(uuid.uuid4())
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=DOCUMENT_TTL_HOURS)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(hours=DOCUMENT_TTL_HOURS)
+            if conversation_id else None
+        )
         # Store document and chunks without embeddings first
         document = {
             "_id": document_id,
@@ -510,7 +552,7 @@ async def upload_file(
             "content_type": file.content_type,
             "document_id": document_id,
             "knowledge_space_id": knowledge_space_id,
-            "expires_at": expires_at.isoformat()
+            "expires_at": expires_at.isoformat() if expires_at else None
         })
         
     except HTTPException:
@@ -554,8 +596,11 @@ async def get_document(request: Request, document_id: str, current_user: User = 
 async def delete_document(request: Request, document_id: str, current_user: User = Depends(get_current_user)):
     """Delete a document by ID"""
     db = await get_db()
-    # Delete document and its chunks
-    result = await db.documents.delete_one({"_id": document_id, "user_email": current_user.email})
+    # Delete document and its chunks (owner, or admin for shared space docs)
+    doc_filter = {"_id": document_id}
+    if current_user.role != UserRole.ADMIN:
+        doc_filter["user_email"] = current_user.email
+    result = await db.documents.delete_one(doc_filter)
     # Only delete chunks if the document delete actually occurred
     if result.deleted_count:
         await db.document_chunks.delete_many({"document_id": document_id})

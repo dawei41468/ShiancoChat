@@ -151,6 +151,12 @@ async def init_indexes():
         )
         logger.info("Index created: knowledge_spaces(owner_email, updated_at)")
 
+        await db.knowledge_spaces.create_index(
+            [("scope", 1), ("department", 1)],
+            name="knowledge_spaces_scope_department_idx"
+        )
+        logger.info("Index created: knowledge_spaces(scope, department)")
+
         await db.artifacts.create_index(
             [("conversation_id", 1), ("user_email", 1), ("updated_at", -1)],
             name="artifacts_conversation_user_updated_idx"

@@ -10,7 +10,7 @@ from time import perf_counter
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
-from backend.models import StreamRequestPayload, User
+from backend.models import StreamRequestPayload, User, UserRole
 from backend.database import get_db
 from backend.utils.web_search.main import perform_web_search, WebSearchError
 from backend.utils.rag import embed_query, search_chunks
@@ -18,6 +18,7 @@ from backend.config import config
 from backend.rate_limiter import limiter
 from backend.auth import get_current_user
 from backend.routers.tools import assert_tool_allowed, get_tool_config, record_tool_audit, user_can_use_tool
+from backend.routers.documents import _assert_space_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -113,6 +114,30 @@ async def chat_with_openai(
     # This should be done after loading conversation history
     payload["messages"].append({"role": "user", "content": input.text})
 
+    # Resolve the requested assistant (server-side persona): apply its system
+    # prompt, wrap the user message with its output template, and fall back to
+    # its default knowledge space when the request did not pick one.
+    assistant = None
+    if input.assistant_id:
+        assistant = await db.assistants.find_one({"id": input.assistant_id, "enabled": True})
+        user_department = getattr(current_user.department, "value", current_user.department)
+        if (not assistant
+                or (assistant.get("department")
+                    and assistant["department"] != user_department
+                    and current_user.role != UserRole.ADMIN)):
+            raise HTTPException(status_code=404, detail="Assistant not found")
+        if assistant.get("system_prompt"):
+            payload["messages"].insert(0, {"role": "system", "content": assistant["system_prompt"]})
+        if assistant.get("output_template") and payload["messages"]:
+            payload["messages"][-1]["content"] = (
+                f"{assistant['output_template']}\n\nUser request:\n{payload['messages'][-1]['content']}"
+            )
+        if not input.knowledge_space_id and assistant.get("default_knowledge_space_id"):
+            input.knowledge_space_id = assistant["default_knowledge_space_id"]
+
+    # Audit enrichment: tag tool events with the active assistant for the admin view.
+    audit_extra = {"assistant_id": assistant["id"]} if assistant else {}
+
     # Determine if web search should be performed
     perform_search = False
     user_query = ""
@@ -126,7 +151,9 @@ async def chat_with_openai(
         file_search_allowed = True
 
     if payload["messages"]:
-        user_query = payload["messages"][-1]["content"]
+        # Use the raw user text for the search heuristic; the assistant output
+        # template (if any) has already been wrapped into the payload message.
+        user_query = input.text
         query_wants_search = should_use_web_search(user_query)
         if input.web_search_enabled:
             # When user explicitly toggles search ON, only skip obvious greetings
@@ -169,7 +196,7 @@ async def chat_with_openai(
                 conversation_id=input.conversation_id,
                 status="success",
                 latency_ms=search_latency_ms,
-                details={"result_count": len(search_results)},
+                details={"result_count": len(search_results), **audit_extra},
             )
             search_context = "\n\nWeb Search Results:\n"
             for i, res in enumerate(search_results[:3]):
@@ -192,7 +219,7 @@ async def chat_with_openai(
                 conversation_id=input.conversation_id,
                 status=audit_status,
                 latency_ms=search_latency_ms,
-                details={"result_count": 0, "reason": "search_failed" if search_failed else "empty_results"},
+                details={"result_count": 0, "reason": "search_failed" if search_failed else "empty_results", **audit_extra},
             )
             if search_failed:
                 logger.warning("Web search failed due to an error. Answering based on existing knowledge.")
@@ -208,6 +235,14 @@ async def chat_with_openai(
     perform_rag = input.rag_enabled and file_search_allowed
     rag_context = ""
     rag_chunks = None
+    # Verify access to the requested knowledge space up front (404 hides
+    # existence). A selected space means "search the space library", so the
+    # per-conversation filter is dropped; department spaces are shared across
+    # members, so the per-user filter is dropped for them too.
+    rag_space = None
+    if perform_rag and input.knowledge_space_id:
+        rag_space = await _assert_space_access(db, current_user, input.knowledge_space_id)
+    space_shared = bool(rag_space and rag_space.get("scope") == "department")
     if perform_rag and user_query:
         logger.info(f"RAG enabled for query: '{user_query}'")
         rag_started = perf_counter()
@@ -215,9 +250,9 @@ async def chat_with_openai(
         if query_embedding:
             # Pass query_text for hybrid search support
             chunks = await search_chunks(
-                user_email, query_embedding,
+                None if space_shared else user_email, query_embedding,
                 top_k=5, threshold=0.7,
-                conversation_id=input.conversation_id,
+                conversation_id=None if input.knowledge_space_id else input.conversation_id,
                 knowledge_space_id=input.knowledge_space_id,
                 query_text=user_query
             )
@@ -229,15 +264,15 @@ async def chat_with_openai(
                     conversation_id=input.conversation_id,
                     status="success",
                     latency_ms=int((perf_counter() - rag_started) * 1000),
-                    details={"result_count": len(chunks), "knowledge_space_id": input.knowledge_space_id},
+                    details={"result_count": len(chunks), "knowledge_space_id": input.knowledge_space_id, **audit_extra},
                 )
                 doc_ids = list({chunk["document_id"] for chunk in chunks if chunk.get("document_id")})
                 doc_metadata = {}
                 if doc_ids:
-                    docs = await db.documents.find({
-                        "_id": {"$in": doc_ids},
-                        "user_email": user_email,
-                    }).to_list(len(doc_ids))
+                    metadata_filter = {"_id": {"$in": doc_ids}}
+                    if not space_shared:
+                        metadata_filter["user_email"] = user_email
+                    docs = await db.documents.find(metadata_filter).to_list(len(doc_ids))
                     doc_metadata = {
                         doc["_id"]: {
                             "filename": doc.get("filename"),
@@ -265,13 +300,17 @@ async def chat_with_openai(
             else:
                 # Fallback: if embeddings not ready yet, try to use recent document chunks by conversation
                 try:
-                    doc_filter = {}
-                    if user_email:
-                        doc_filter["user_email"] = user_email
-                    if input.conversation_id:
-                        doc_filter["conversation_id"] = input.conversation_id
                     if input.knowledge_space_id:
-                        doc_filter["knowledge_space_id"] = input.knowledge_space_id
+                        # Space-scoped fallback: search the space library
+                        doc_filter = {"knowledge_space_id": input.knowledge_space_id}
+                        if not space_shared and user_email:
+                            doc_filter["user_email"] = user_email
+                    else:
+                        doc_filter = {}
+                        if user_email:
+                            doc_filter["user_email"] = user_email
+                        if input.conversation_id:
+                            doc_filter["conversation_id"] = input.conversation_id
                     docs_cursor = db.documents.find(doc_filter).sort("created_at", -1)
                     latest_doc = await docs_cursor.to_list(1)
                     if latest_doc:
@@ -298,6 +337,7 @@ async def chat_with_openai(
                                     "result_count": len(raw_chunks),
                                     "knowledge_space_id": input.knowledge_space_id,
                                     "document_id": doc_id,
+                                    **audit_extra,
                                 },
                             )
                             rag_context = "\n\nDocument Content (raw chunks):\n"
@@ -325,7 +365,7 @@ async def chat_with_openai(
                         conversation_id=input.conversation_id,
                         status="no_results",
                         latency_ms=int((perf_counter() - rag_started) * 1000),
-                        details={"result_count": 0, "knowledge_space_id": input.knowledge_space_id},
+                        details={"result_count": 0, "knowledge_space_id": input.knowledge_space_id, **audit_extra},
                     )
                     if payload["messages"]:
                         payload["messages"][-1]["content"] = "(No relevant documents found. Answering based on conversation history.)\n\n" + payload["messages"][-1]["content"]
@@ -339,7 +379,7 @@ async def chat_with_openai(
                 conversation_id=input.conversation_id,
                 status="error",
                 latency_ms=int((perf_counter() - rag_started) * 1000),
-                details={"reason": "embedding_failed", "knowledge_space_id": input.knowledge_space_id},
+                details={"reason": "embedding_failed", "knowledge_space_id": input.knowledge_space_id, **audit_extra},
             )
             logger.warning("Failed to embed query for RAG.")
             # Check if payload["messages"] is not empty before accessing it

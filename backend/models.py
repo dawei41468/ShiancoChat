@@ -151,6 +151,7 @@ class StreamRequestPayload(BaseModel):
     web_search_enabled: Optional[bool] = False
     rag_enabled: Optional[bool] = False
     knowledge_space_id: Optional[str] = None
+    assistant_id: Optional[str] = None
 class TitleGenerationRequest(BaseModel):
     model: str
 
@@ -171,7 +172,7 @@ class Document(BaseModel):
     knowledge_space_id: Optional[str] = None
     content: str
     content_type: str
-    expires_at: datetime
+    expires_at: Optional[datetime] = None  # None = persistent (knowledge-space library docs); set for ad-hoc conversation uploads
     conversation_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     chunk_count: int = 0
@@ -181,7 +182,8 @@ class KnowledgeSpace(BaseModel):
     name: str
     description: Optional[str] = None
     owner_email: str
-    scope: str = "user"
+    scope: str = "user"  # "user" (private to owner) or "department" (shared with department members)
+    department: Optional[Department] = None  # required iff scope == "department"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     document_count: int = 0
@@ -190,7 +192,53 @@ class KnowledgeSpaceCreate(BaseModel):
     name: str
     description: Optional[str] = None
     scope: str = "user"
+    department: Optional[Department] = None
 
 class KnowledgeSpaceUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+
+class Assistant(BaseModel):
+    """A governed, department-scoped assistant: system prompt + default
+    knowledge space + model policy + output template."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    name_zh: Optional[str] = None
+    description: Optional[str] = None
+    description_zh: Optional[str] = None
+    department: Optional[Department] = None  # None = global (all users)
+    icon: str = "Bot"
+    system_prompt: str = ""
+    default_knowledge_space_id: Optional[str] = None
+    model_policy: str = "balanced"  # fast | balanced | deep | local
+    output_template: Optional[str] = None
+    enabled: bool = True
+    created_by: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class AssistantCreate(BaseModel):
+    name: str
+    name_zh: Optional[str] = None
+    description: Optional[str] = None
+    description_zh: Optional[str] = None
+    department: Optional[Department] = None
+    icon: str = "Bot"
+    system_prompt: str = ""
+    default_knowledge_space_id: Optional[str] = None
+    model_policy: str = "balanced"
+    output_template: Optional[str] = None
+    enabled: bool = True
+
+class AssistantUpdate(BaseModel):
+    name: Optional[str] = None
+    name_zh: Optional[str] = None
+    description: Optional[str] = None
+    description_zh: Optional[str] = None
+    department: Optional[Department] = None
+    icon: Optional[str] = None
+    system_prompt: Optional[str] = None
+    default_knowledge_space_id: Optional[str] = None
+    model_policy: Optional[str] = None
+    output_template: Optional[str] = None
+    enabled: Optional[bool] = None

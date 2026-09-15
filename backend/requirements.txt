@@ -6,6 +6,8 @@ motor==3.3.2
 python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# bcrypt>=5 hard-errors on >72-byte passwords, which crashes passlib 1.7.4 probes
+bcrypt>=4.0.1,<5.0
 python-dotenv==1.0.0
 httpx==0.25.2
 slowapi==0.1.9
@@ -24,10 +26,9 @@ pypdf==4.3.1
 python-magic==0.4.27
 python-docx==1.1.2
 openpyxl==3.1.5
-langchain==0.1.20
-langchain-openai==0.1.7
-langchain-community==0.0.38
-langchain-core==0.1.52
+# Only RecursiveCharacterTextSplitter is used; the standalone package replaces
+# the old langchain/langchain-openai/langchain-community/langchain-core pins.
+langchain-text-splitters>=0.3,<1.0
 
 # Web search
 duckduckgo-search==3.9.6

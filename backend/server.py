@@ -40,10 +40,10 @@ load_dotenv(ROOT_DIR / 'backend' / '.env', verbose=False)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from backend.database import close_mongo_connection, init_client_with_retry, init_indexes, get_db
-from backend.routers import chat, openai, auth, users, documents, tools
+from backend.routers import chat, openai, auth, users, documents, tools, assistants
 from backend.auth import get_current_user
 from backend.models import User
-logger.info(f"Imported routers: {[r.__name__ for r in [chat, openai, auth, users, documents, tools]]}")
+logger.info(f"Imported routers: {[r.__name__ for r in [chat, openai, auth, users, documents, tools, assistants]]}")
 
 # Get port from environment variable, default to 4100 if not set
 PORT = int(os.environ.get("PORT", 4100))
@@ -100,6 +100,7 @@ app.include_router(auth.router, prefix="/api/auth")
 app.include_router(users.router, prefix="/api/users")
 app.include_router(documents.router)
 app.include_router(tools.router)
+app.include_router(assistants.router)
 logger.info("Successfully mounted documents router")
 
 from fastapi.routing import APIRoute

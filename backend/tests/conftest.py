@@ -8,6 +8,7 @@ from jose import jwt
 
 # Capture the real httpx.AsyncClient BEFORE any mocking so test fixtures can use it
 from httpx import AsyncClient as _RealAsyncClient
+from httpx import ASGITransport as _ASGITransport
 
 # Add project root to path
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -118,7 +119,7 @@ async def test_user_token(test_user):
 async def authorized_client(test_user_token):
     """Return an async HTTP client with authorization header set."""
     from httpx import AsyncClient
-    async with _RealAsyncClient(app=app, base_url="http://test") as client:
+    async with _RealAsyncClient(transport=_ASGITransport(app=app), base_url="http://test") as client:
         client.headers["Authorization"] = f"Bearer {test_user_token}"
         yield client
 
@@ -131,7 +132,7 @@ async def admin_client(admin_user):
         data={"sub": admin_user.email},
         expires_delta=timedelta(minutes=30)
     )
-    async with _RealAsyncClient(app=app, base_url="http://test") as client:
+    async with _RealAsyncClient(transport=_ASGITransport(app=app), base_url="http://test") as client:
         client.headers["Authorization"] = f"Bearer {token}"
         yield client
 
@@ -157,7 +158,7 @@ async def authorized_client_b(test_user_b):
         data={"sub": test_user_b.email},
         expires_delta=timedelta(minutes=30)
     )
-    async with _RealAsyncClient(app=app, base_url="http://test") as client:
+    async with _RealAsyncClient(transport=_ASGITransport(app=app), base_url="http://test") as client:
         client.headers["Authorization"] = f"Bearer {token}"
         yield client
 
@@ -166,7 +167,7 @@ async def authorized_client_b(test_user_b):
 async def anon_client():
     """Return an unauthenticated async HTTP client."""
     from httpx import AsyncClient
-    async with _RealAsyncClient(app=app, base_url="http://test") as client:
+    async with _RealAsyncClient(transport=_ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
