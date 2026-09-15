@@ -70,7 +70,8 @@ HYBRID_SEARCH_ALPHA=0.7
 
 ### 2.4 Security & Privacy
 
-- **User Isolation:** All RAG queries filter by `user_email` (and optionally `conversation_id` / `knowledge_space_id`).
+- **User Isolation:** By default, RAG queries filter by `user_email` (and optionally `conversation_id` / `knowledge_space_id`).
+- **Department Spaces:** When a `knowledge_space_id` is supplied, the chat endpoint verifies space access (owner, department member, or admin; denials return 404) and retrieval filters by `knowledge_space_id` only — the `user_email` chunk filter is dropped for department-scoped spaces so members share the same library, and the `conversation_id` filter is dropped for any explicit space selection.
 - **PII:** Documents are chunked and embedded as-is; no automatic PII redaction is performed.
 - **Access Logging:** Tool audit events track web search and file search usage per user.
 

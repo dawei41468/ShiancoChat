@@ -205,9 +205,20 @@ Stream a chat completion. **Requires auth.**
   "model": "deepseek/deepseek-r1-0528-qwen3-8b",
   "isWebSearchEnabled": false,
   "isRagEnabled": true,
-  "workflow_id": "default"
+  "workflow_id": "default",
+  "assistant_id": null,
+  "knowledge_space_id": null
 }
 ```
+
+`assistant_id` (optional): applies the assistant's system prompt, output template,
+and default knowledge space server-side. Only assistants visible to the caller
+(global or own-department) are accepted; anything else returns `404`.
+
+`knowledge_space_id` (optional): scopes RAG retrieval to a knowledge space. The
+caller must have access to the space (owner, department member for
+department-scoped spaces, or admin); anything else returns `404`. Retrieval in a
+department-scoped space searches chunks from all members of that department.
 
 **Response:** SSE stream of completion chunks.
 
@@ -240,29 +251,36 @@ Get RAG configuration.
 ## Documents & Knowledge Spaces
 
 ### GET `/documents/spaces`
-List all knowledge spaces. **Requires auth.**
+List knowledge spaces visible to the caller: own spaces plus department-scoped
+spaces for the caller's department. **Requires auth.**
 
-**Response:** `List[KnowledgeSpace]`
+**Response:** `List[KnowledgeSpace]` — each space has `scope` (`"user"` |
+`"department"`) and `department` (set only when `scope == "department"`).
 
 ### POST `/documents/spaces`
 Create a knowledge space. **Requires auth.**
 
 **Request:**
 ```json
-{ "name": "My Space", "description": "..." }
+{ "name": "My Space", "description": "...", "scope": "user", "department": null }
 ```
 
+`scope: "department"` requires **admin** and a valid `department` value.
+Department spaces are readable/writable by all members of that department;
+only admins can rename or delete them.
+
 ### GET `/documents/spaces/{space_id}`
-Get a knowledge space with its documents. **Requires auth + ownership.**
+Get a knowledge space with its documents. **Requires auth + space access.**
+(Access denials return `404` to avoid leaking space existence.)
 
 ### PATCH `/documents/spaces/{space_id}`
-Update a knowledge space. **Requires auth + ownership.**
+Update a knowledge space. **Requires auth + ownership** (admin-only for department spaces).
 
 ### DELETE `/documents/spaces/{space_id}`
-Delete a knowledge space and its documents. **Requires auth + ownership.**
+Delete a knowledge space and its documents. **Requires auth + ownership** (admin-only for department spaces).
 
 ### GET `/documents/spaces/{space_id}/documents`
-List documents in a knowledge space. **Requires auth + ownership.**
+List documents in a knowledge space. **Requires auth + space access.**
 
 ### POST `/documents`
 Create a document from text. **Requires auth.**
@@ -281,6 +299,9 @@ Upload a file (PDF, DOCX, TXT) for RAG indexing. **Requires auth.**
 
 **Request:** `multipart/form-data` with `file` and optional `knowledge_space_id`.
 
+**TTL:** uploads attached to a knowledge space persist indefinitely
+(`expires_at: null`); ad-hoc conversation uploads expire after 24 hours.
+
 **Response:** `DocumentResponse`
 
 ### GET `/documents/{document_id}`
@@ -291,6 +312,52 @@ Delete a document. **Requires auth + ownership.**
 
 ### POST `/documents/cleanup`
 Remove expired temporary documents. **Requires auth.**
+
+---
+
+## Assistants
+
+An assistant is a governed, server-side persona: system prompt + default
+knowledge space + model policy + output template, scoped globally or to a
+department. Seed assistants are created idempotently on first list.
+
+### GET `/assistants`
+List assistants visible to the caller (global + own department).
+**Requires auth.** Admins additionally see disabled assistants.
+
+**Response:** `List[Assistant]`
+
+### GET `/assistants/{assistant_id}`
+Get one assistant. **Requires auth + visibility** (404 otherwise).
+
+### POST `/assistants`
+Create an assistant. **Requires admin.**
+
+**Request:**
+```json
+{
+  "name": "Sales Quote Drafter",
+  "name_zh": "报价助手",
+  "description": "Drafts customer quotes",
+  "description_zh": "起草客户报价",
+  "department": "agio_business",
+  "icon": "FileText",
+  "system_prompt": "You are...",
+  "default_knowledge_space_id": null,
+  "model_policy": "balanced",
+  "output_template": null,
+  "enabled": true
+}
+```
+
+`department: null` makes the assistant global. `model_policy` is one of
+`fast | balanced | deep | local` (mapped to concrete models client-side).
+
+### PATCH `/assistants/{assistant_id}`
+Update an assistant (partial). **Requires admin.**
+
+### DELETE `/assistants/{assistant_id}`
+Delete an assistant. **Requires admin.**
 
 ---
 
