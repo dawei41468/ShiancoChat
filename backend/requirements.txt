@@ -10,7 +10,7 @@ python-dotenv==1.0.0
 httpx==0.25.2
 slowapi==0.1.9
 pydantic==2.8.2
-pydantic-settings==2.0.3
+pydantic-settings==2.15.0
 
 # AI/ML dependencies
 torch==2.6.0
