@@ -108,8 +108,8 @@ const ChatPage = ({ sidebarOpen }) => {
   }, [conversations, currentConversationId, fetchConversations]);
 
   return (
-    <div className="flex-1 flex min-w-0 bg-background">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex-1 flex min-w-0 bg-background min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col min-h-0">
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-16 lg:p-24 min-h-0 overflow-y-auto">
           <div className="text-center mb-12">

@@ -97,7 +97,7 @@ const ProtectedRoute = () => {
         <TopBar
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         />
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <Routes>
             <Route path="/" element={<RouteErrorBoundary><ChatPage sidebarOpen={sidebarOpen} /></RouteErrorBoundary>} />
             <Route path="/tutorials" element={<RouteErrorBoundary><TutorialsPage /></RouteErrorBoundary>} />
