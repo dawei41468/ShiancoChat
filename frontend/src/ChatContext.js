@@ -23,7 +23,10 @@ export const ChatProvider = ({ children }) => {
   const [currentDocument, setCurrentDocument] = useState(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(() => localStorage.getItem('selected_workflow_id') || DEFAULT_WORKFLOW_ID);
   const [artifacts, setArtifacts] = useState([]);
+  const [assistants, setAssistants] = useState([]);
+  const [selectedAssistantId, setSelectedAssistantId] = useState(() => localStorage.getItem('selected_assistant_id') || '');
   const selectedWorkflow = getWorkflowById(selectedWorkflowId);
+  const selectedAssistant = assistants.find(a => a.id === selectedAssistantId) || null;
 
   const conversationsHook = useConversations({ user, showToast });
   const knowledgeHook = useKnowledgeSpaces({ user, showToast });
@@ -33,6 +36,7 @@ export const ChatProvider = ({ children }) => {
     conversations: conversationsHook.conversations,
     selectedModel,
     selectedKnowledgeSpaceId: knowledgeHook.selectedKnowledgeSpaceId,
+    selectedAssistantId,
     showToast,
     fetchConversations: conversationsHook.fetchConversations,
   });
@@ -67,6 +71,7 @@ export const ChatProvider = ({ children }) => {
       if (user) {
         await fetchAvailableModels();
         await knowledgeHook.fetchKnowledgeSpaces();
+        await fetchAssistants();
         const convos = await conversationsHook.fetchConversations();
         if (convos.length > 0) {
           conversationsHook.setCurrentConversationId(currentId => currentId || convos[0].id);
@@ -81,7 +86,10 @@ export const ChatProvider = ({ children }) => {
         knowledgeHook.setKnowledgeSpaces(prev => (prev.length === 0 ? prev : []));
         knowledgeHook.setSelectedKnowledgeSpaceId(prev => (prev === null ? prev : null));
         knowledgeHook.setKnowledgeSpaceDocuments(prev => (prev.length === 0 ? prev : []));
+        setAssistants(prev => (prev.length === 0 ? prev : []));
+        setSelectedAssistantId(prev => (prev === '' ? prev : ''));
         localStorage.removeItem('selected_knowledge_space_id');
+        localStorage.removeItem('selected_assistant_id');
       }
     };
     initialize();
@@ -107,6 +115,22 @@ export const ChatProvider = ({ children }) => {
     }
   }, [manualModelOverride, modelPolicy]);
 
+  const fetchAssistants = useCallback(async () => {
+    if (!user) {
+      setAssistants([]);
+      return [];
+    }
+    try {
+      const response = await apiService.fetchAssistants();
+      const list = response.data || [];
+      setAssistants(list);
+      return list;
+    } catch (error) {
+      console.error('Error fetching assistants:', error);
+      return [];
+    }
+  }, [user]);
+
   const fetchArtifacts = useCallback(async (conversationId) => {
     if (!user || !conversationId) {
       setArtifacts([]);
@@ -123,6 +147,22 @@ export const ChatProvider = ({ children }) => {
       return [];
     }
   }, [user]);
+
+  const handleAssistantChange = (assistantId) => {
+    const assistant = assistants.find(a => a.id === assistantId) || null;
+    setSelectedAssistantId(assistant ? assistant.id : '');
+    if (assistant) {
+      localStorage.setItem('selected_assistant_id', assistant.id);
+      if (assistant.model_policy) {
+        handleModelPolicyChange(assistant.model_policy);
+      }
+      if (assistant.default_knowledge_space_id) {
+        knowledgeHook.handleKnowledgeSpaceChange(assistant.default_knowledge_space_id);
+      }
+    } else {
+      localStorage.removeItem('selected_assistant_id');
+    }
+  };
 
   const handleModelChange = (model) => {
     setSelectedModel(model);
@@ -237,6 +277,11 @@ export const ChatProvider = ({ children }) => {
     selectedWorkflow,
     selectedWorkflowId,
     handleWorkflowChange,
+    assistants,
+    selectedAssistant,
+    selectedAssistantId,
+    handleAssistantChange,
+    fetchAssistants,
     artifacts,
     fetchArtifacts,
     createArtifact,

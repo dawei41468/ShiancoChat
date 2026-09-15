@@ -1,12 +1,12 @@
 import React from 'react';
 import {
-  Lightbulb, FileText, Sparkles, Globe
+  Lightbulb, FileText, Sparkles, Globe, ClipboardList, Mail, ListChecks, Bot
 } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 
-const SuggestedPrompts = ({ prompts, onPromptClick }) => {
+const SuggestedPrompts = ({ prompts, onPromptClick, selectedId = null }) => {
   const LucideIconMap = {
-    Lightbulb, FileText, Sparkles, Globe
+    Lightbulb, FileText, Sparkles, Globe, ClipboardList, Mail, ListChecks, Bot
   };
   const { t } = useLanguage();
 
@@ -18,7 +18,9 @@ const SuggestedPrompts = ({ prompts, onPromptClick }) => {
           <button
             key={prompt.id}
             onClick={() => onPromptClick(prompt)}
-            className="p-4 rounded-xl transition-colors text-left border bg-surface border-border hover:bg-hover"
+            className={`p-4 rounded-xl transition-colors text-left border bg-surface border-border hover:bg-hover ${
+              prompt.id === selectedId ? 'ring-2 ring-purple-500' : ''
+            }`}
           >
             <div className="flex items-center space-x-3">
               {IconComponent && (

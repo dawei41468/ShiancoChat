@@ -9,6 +9,7 @@ export function useMessages({
   conversations,
   selectedModel,
   selectedKnowledgeSpaceId,
+  selectedAssistantId,
   showToast,
   fetchConversations,
 }) {
@@ -110,9 +111,12 @@ export function useMessages({
 
     const streamPayload = {
       conversation_id: currentConversationId,
-      text: applyWorkflowInstruction(text, workflowId),
+      // Assistant output templates are applied server-side; skip the client-side
+      // workflow prefix when an assistant is active to avoid double-prefixing.
+      text: selectedAssistantId ? text : applyWorkflowInstruction(text, workflowId),
       model: selectedModel,
       knowledge_space_id: selectedKnowledgeSpaceId,
+      assistant_id: selectedAssistantId || null,
     };
 
     const updateAIResponse = (updater) => {

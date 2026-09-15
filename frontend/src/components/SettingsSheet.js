@@ -2,11 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Globe, FileText, Server, Trash2, Plus, Save, RefreshCw, Database, Search, Pencil } from 'lucide-react';
 import * as apiService from '@/services/apiService';
 import { useLanguage } from '@/LanguageContext';
+import { useAuth } from '@/AuthContext';
 import { useChat } from '@/ChatContext';
+import { DEPARTMENTS, getDepartmentLabel } from '@/utils/departments';
 import ConfirmDialog from './ConfirmDialog';
 
 export default function SettingsSheet({ open, onClose }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const { user } = useAuth();
   const {
     availableModels,
     selectedModel,
@@ -30,6 +33,8 @@ export default function SettingsSheet({ open, onClose }) {
   const [webDefault, setWebDefault] = useState(true);
   const [ragDefault, setRagDefault] = useState(true);
   const [newSpaceName, setNewSpaceName] = useState('');
+  const [newSpaceScope, setNewSpaceScope] = useState('user');
+  const [newSpaceDepartment, setNewSpaceDepartment] = useState(DEPARTMENTS[0].value);
   const [spaceName, setSpaceName] = useState('');
   const [spaceDescription, setSpaceDescription] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
@@ -149,8 +154,14 @@ export default function SettingsSheet({ open, onClose }) {
     if (!name) return;
     setBusyAction('create-space');
     try {
-      await createKnowledgeSpace({ name });
+      const payload = { name };
+      if (isAdmin && newSpaceScope === 'department') {
+        payload.scope = 'department';
+        payload.department = newSpaceDepartment;
+      }
+      await createKnowledgeSpace(payload);
       setNewSpaceName('');
+      setNewSpaceScope('user');
     } catch (error) {
       console.error('Failed to create knowledge space:', error);
     } finally {
@@ -199,6 +210,9 @@ export default function SettingsSheet({ open, onClose }) {
     (spaceDescription.trim() || '') !== (selectedKnowledgeSpace.description || '')
   );
   const isDefaultSpace = selectedKnowledgeSpace?.name === 'My Knowledge';
+  const isAdmin = user?.role === 'Admin';
+  const isDepartmentSpace = selectedKnowledgeSpace?.scope === 'department';
+  const spaceReadOnly = isDefaultSpace || (isDepartmentSpace && !isAdmin);
 
   if (!open) return null;
 
@@ -257,7 +271,11 @@ export default function SettingsSheet({ open, onClose }) {
                 className="min-w-0 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary"
               >
                 {knowledgeSpaces.map((space) => (
-                  <option key={space.id} value={space.id}>{space.name}</option>
+                  <option key={space.id} value={space.id}>
+                    {space.name}{space.scope === 'department'
+                      ? ` · ${getDepartmentLabel(space.department, language) || (t?.departmentBadge || 'Dept')}`
+                      : ''}
+                  </option>
                 ))}
               </select>
               <form onSubmit={handleCreateSpace} className="flex items-center gap-2">
@@ -279,6 +297,39 @@ export default function SettingsSheet({ open, onClose }) {
               </form>
             </div>
 
+            {isAdmin && (
+              <div className="flex items-center gap-2 mb-3">
+                <select
+                  value={newSpaceScope}
+                  onChange={(event) => setNewSpaceScope(event.target.value)}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text-primary"
+                  aria-label={t?.spaceScope || 'Space scope'}
+                >
+                  <option value="user">{t?.scopeUser || 'Personal'}</option>
+                  <option value="department">{t?.scopeDepartment || 'Department'}</option>
+                </select>
+                {newSpaceScope === 'department' && (
+                  <select
+                    value={newSpaceDepartment}
+                    onChange={(event) => setNewSpaceDepartment(event.target.value)}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text-primary"
+                    aria-label={t?.departmentLabel || 'Department'}
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <option key={dept.value} value={dept.value}>
+                        {language === 'CN' ? dept.labelZh : dept.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {newSpaceScope === 'department' && (
+                  <span className="text-[11px] text-text-secondary">
+                    {t?.deptSpaceHint || 'Shared with all members of the department'}
+                  </span>
+                )}
+              </div>
+            )}
+
             {selectedKnowledgeSpace && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -286,14 +337,14 @@ export default function SettingsSheet({ open, onClose }) {
                   <input
                     value={spaceName}
                     onChange={(event) => setSpaceName(event.target.value)}
-                    disabled={isDefaultSpace}
+                    disabled={spaceReadOnly}
                     className="flex-1 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary disabled:opacity-60"
                   />
                 </div>
                 <textarea
                   value={spaceDescription}
                   onChange={(event) => setSpaceDescription(event.target.value)}
-                  disabled={isDefaultSpace}
+                  disabled={spaceReadOnly}
                   placeholder={t?.description || 'Description'}
                   className="w-full h-16 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary resize-none disabled:opacity-60"
                 />
@@ -305,7 +356,7 @@ export default function SettingsSheet({ open, onClose }) {
                     <button
                       type="button"
                       onClick={handleSaveSpace}
-                      disabled={!hasSpaceChanges || isDefaultSpace || busyAction === 'save-space'}
+                      disabled={!hasSpaceChanges || spaceReadOnly || busyAction === 'save-space'}
                       className="p-2 rounded-lg bg-surface border border-border hover:bg-hover disabled:opacity-40"
                       aria-label={t?.save || 'Save'}
                       title={t?.save || 'Save'}
@@ -315,7 +366,7 @@ export default function SettingsSheet({ open, onClose }) {
                     <button
                       type="button"
                       onClick={handleDeleteSpace}
-                      disabled={isDefaultSpace || busyAction === 'delete-space'}
+                      disabled={spaceReadOnly || busyAction === 'delete-space'}
                       className="p-2 rounded-lg bg-surface border border-border hover:bg-hover text-red-500 disabled:opacity-40"
                       aria-label={t?.deleteKnowledgeSpace || 'Delete knowledge space'}
                       title={t?.deleteKnowledgeSpace || 'Delete knowledge space'}

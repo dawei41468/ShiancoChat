@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { uploadDocument, fetchTools } from '@/services/apiService';
-import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Globe, Workflow } from 'lucide-react';
+import { Send, Maximize2, Minimize2, Square, Paperclip, FileText, Globe, Workflow, Bot, X } from 'lucide-react';
 import { useLanguage } from '@/LanguageContext';
 import { useChat } from '@/ChatContext';
 import * as apiService from '@/services/apiService';
+import { getDepartmentLabel } from '@/utils/departments';
 
 const AttachmentMenu = ({ onFileSelect }) => {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -61,7 +62,7 @@ const AttachmentMenu = ({ onFileSelect }) => {
 
 const ChatInput = ({ sidebarOpen }) => {
   const textareaRef = useRef(null);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const {
     inputValue,
     setInputValue,
@@ -77,7 +78,10 @@ const ChatInput = ({ sidebarOpen }) => {
     selectedKnowledgeSpace,
     selectedKnowledgeSpaceId,
     knowledgeSpaceDocuments,
-    fetchSelectedKnowledgeSpace
+    fetchSelectedKnowledgeSpace,
+    selectedAssistant,
+    handleAssistantChange,
+    assistants
   } = useChat();
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isRagEnabled, setIsRagEnabled] = useState(false);
@@ -177,6 +181,16 @@ const ChatInput = ({ sidebarOpen }) => {
   };
 
   const handleKeyDown = (e) => {
+    if (slashOpen && (e.key === 'Enter' || e.key === 'Tab')) {
+      e.preventDefault();
+      pickAssistant(slashCandidates[0]);
+      return;
+    }
+    if (slashOpen && e.key === 'Escape') {
+      e.preventDefault();
+      setSlashDismissed(true);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
@@ -203,6 +217,27 @@ const ChatInput = ({ sidebarOpen }) => {
     });
   };
 
+  const [slashDismissed, setSlashDismissed] = useState(false);
+
+  const slashToken = inputValue.startsWith('/') && !inputValue.includes(' ')
+    ? inputValue.slice(1).toLowerCase()
+    : null;
+  const slashCandidates = slashToken !== null
+    ? (assistants || []).filter((assistant) => {
+        const nameEn = (assistant.name || '').toLowerCase();
+        const nameZh = assistant.name_zh || '';
+        return !slashToken || nameEn.startsWith(slashToken) || nameZh.includes(slashToken);
+      })
+    : [];
+  const slashOpen = slashToken !== null && !slashDismissed && slashCandidates.length > 0;
+
+  const pickAssistant = (assistant) => {
+    handleAssistantChange(assistant.id);
+    setInputValue('');
+    setSlashDismissed(false);
+    textareaRef.current?.focus();
+  };
+
   const knowledgeSourceCount = knowledgeSpaceDocuments.length;
   const activeKnowledgeName = selectedKnowledgeSpace?.name || 'No knowledge space';
 
@@ -214,10 +249,32 @@ const ChatInput = ({ sidebarOpen }) => {
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
           <div className={`relative flex-1 flex flex-col rounded-xl bg-surface border-border ${isChatInputFullScreen ? 'h-full' : 'h-[100px]'} focus-within:ring-2 focus-within:ring-purple-gradient-start`}>
             <div className="relative flex-1">
+              {slashOpen && (
+                <div className="absolute bottom-full left-0 mb-2 w-64 bg-surface border border-border rounded-lg shadow-lg z-20 max-h-56 overflow-y-auto">
+                  {slashCandidates.map((assistant) => (
+                    <button
+                      key={assistant.id}
+                      type="button"
+                      onClick={() => pickAssistant(assistant)}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-primary hover:bg-hover"
+                    >
+                      <Bot className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                      <span className="truncate">
+                        {language === 'CN' ? (assistant.name_zh || assistant.name) : assistant.name}
+                      </span>
+                      {assistant.department && (
+                        <span className="ml-auto text-[10px] text-text-secondary flex-shrink-0">
+                          {getDepartmentLabel(assistant.department, language)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => { setSlashDismissed(false); setInputValue(e.target.value); }}
                 onKeyDown={handleKeyDown}
                 placeholder={t.sendMessage || "Send a message..."}
                 className={`
@@ -287,6 +344,23 @@ const ChatInput = ({ sidebarOpen }) => {
                     <FileText className="w-4 h-4" />
                     <span className="text-xs font-medium">{t.rag || "RAG"}</span>
                   </button>
+                )}
+                {selectedAssistant && (
+                  <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg text-purple-600 dark:text-purple-300 bg-purple-500/10 border border-purple-500/30">
+                    <Bot className="w-3 h-3" />
+                    <span className="truncate max-w-[140px]">
+                      {language === 'CN' ? (selectedAssistant.name_zh || selectedAssistant.name) : selectedAssistant.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleAssistantChange('')}
+                      aria-label={t.clearAssistant || 'Clear assistant'}
+                      title={t.clearAssistant || 'Clear assistant'}
+                      className="hover:text-purple-800 dark:hover:text-purple-100"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 )}
                 {isRagEnabled && (
                   <div className={`hidden sm:flex items-center gap-1 text-xs px-2 py-1 rounded-lg ${

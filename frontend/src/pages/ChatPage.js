@@ -37,8 +37,11 @@ const ChatPage = ({ sidebarOpen }) => {
     createArtifact,
     updateArtifact,
     deleteArtifact,
+    assistants,
+    selectedAssistantId,
+    handleAssistantChange,
   } = useChat();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeArtifact, setActiveArtifact] = useState(null);
 
   const localSuggestedPrompts = [
@@ -70,6 +73,19 @@ const ChatPage = ({ sidebarOpen }) => {
       workflowId: 'translation',
     }
   ];
+
+  const assistantCards = (assistants || []).map((assistant) => ({
+    id: assistant.id,
+    icon: assistant.icon || 'Bot',
+    title: language === 'CN' ? (assistant.name_zh || assistant.name) : assistant.name,
+    description: language === 'CN'
+      ? (assistant.description_zh || assistant.description || '')
+      : (assistant.description || ''),
+  }));
+
+  const handleAssistantCardClick = (prompt) => {
+    handleAssistantChange(prompt.id === selectedAssistantId ? '' : prompt.id);
+  };
 
   const handleOpenArtifact = async (message) => {
     const existingArtifact = artifacts.find((artifact) => artifact.source_message_id === message.id);
@@ -124,6 +140,18 @@ const ChatPage = ({ sidebarOpen }) => {
             </p>
           </div>
           
+          {assistantCards.length > 0 && (
+            <div className="max-w-2xl w-full mb-8">
+              <h2 className="text-sm font-semibold text-text-secondary mb-3 text-center">
+                {t.assistantsTitle || 'Department Assistants'}
+              </h2>
+              <SuggestedPrompts
+                prompts={assistantCards}
+                onPromptClick={handleAssistantCardClick}
+                selectedId={selectedAssistantId}
+              />
+            </div>
+          )}
           <SuggestedPrompts
             prompts={localSuggestedPrompts}
             onPromptClick={handlePromptClick}

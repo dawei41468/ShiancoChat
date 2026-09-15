@@ -260,6 +260,7 @@ export const streamChatResponse = (payload, { signal, webSearchEnabled, ragEnabl
         text: payload.text,
         model: payload.model,
         knowledge_space_id: payload.knowledge_space_id,
+        assistant_id: payload.assistant_id || null,
         web_search_enabled: webSearchEnabled,
         rag_enabled: ragEnabled,
     };
@@ -294,6 +295,22 @@ export const updateTool = (toolId, tool) => {
 
 export const fetchToolAuditEvents = () => {
   return apiClient.get('/api/tools/audit');
+};
+
+export const fetchAssistants = () => {
+  return apiClient.get('/api/assistants');
+};
+
+export const createAssistant = (assistant) => {
+  return apiClient.post('/api/assistants', assistant);
+};
+
+export const updateAssistant = (assistantId, assistant) => {
+  return apiClient.patch(`/api/assistants/${assistantId}`, assistant);
+};
+
+export const deleteAssistant = (assistantId) => {
+  return apiClient.delete(`/api/assistants/${assistantId}`);
 };
 
 export const generateConversationTitle = (conversationId, model) => {

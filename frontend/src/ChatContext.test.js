@@ -11,6 +11,7 @@ jest.mock('@/services/apiService', () => ({
   fetchKnowledgeSpaces: jest.fn(),
   fetchKnowledgeSpace: jest.fn(),
   fetchArtifactsForConversation: jest.fn(),
+  fetchAssistants: jest.fn(),
 }));
 
 jest.mock('@/services/streaming', () => ({
@@ -60,6 +61,27 @@ const TestChatComponent = () => {
   );
 };
 
+const AssistantTestComponent = () => {
+  const {
+    assistants,
+    selectedAssistantId,
+    handleAssistantChange,
+    modelPolicy,
+    selectedKnowledgeSpaceId,
+  } = useChat();
+
+  return (
+    <div>
+      <div data-testid="assistant-count">{assistants.length}</div>
+      <div data-testid="selected-assistant">{selectedAssistantId || 'none'}</div>
+      <div data-testid="assistant-policy">{modelPolicy}</div>
+      <div data-testid="assistant-space">{selectedKnowledgeSpaceId || 'none'}</div>
+      <button onClick={() => handleAssistantChange('asst-1')}>Pick Assistant</button>
+      <button onClick={() => handleAssistantChange('')}>Clear Assistant</button>
+    </div>
+  );
+};
+
 const renderWithProviders = (ui, { user = mockUser } = {}) => {
   return render(
     <AuthContext.Provider value={{ user, token: 'test-token' }}>
@@ -72,6 +94,7 @@ describe('ChatContext', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    apiService.fetchAssistants.mockResolvedValue({ data: [] });
   });
 
   test('initializes and fetches conversations on mount', async () => {
@@ -117,6 +140,39 @@ describe('ChatContext', () => {
 
     await userEvent.click(screen.getByText('Send'));
     expect(apiService.saveMessage).not.toHaveBeenCalled();
+  });
+
+  test('selecting an assistant applies its model policy and default knowledge space', async () => {
+    const assistant = {
+      id: 'asst-1',
+      name: 'Sales Quote Drafter',
+      name_zh: 'Sales Quote ZH',
+      department: 'agio_business',
+      model_policy: 'deep',
+      default_knowledge_space_id: 'space-9',
+      enabled: true,
+    };
+    apiService.fetchConversations.mockResolvedValue({ data: [{ id: 'conv-1', title: 'Chat 1' }] });
+    apiService.fetchAvailableModels.mockResolvedValue({ data: { models: ['model-a'] } });
+    apiService.fetchKnowledgeSpaces.mockResolvedValue({ data: [{ id: 'space-9', name: 'Agio Space', scope: 'department' }] });
+    apiService.fetchKnowledgeSpace.mockResolvedValue({ data: { documents: [] } });
+    apiService.fetchMessagesForConversation.mockResolvedValue({ data: [] });
+    apiService.fetchArtifactsForConversation.mockResolvedValue({ data: [] });
+    apiService.fetchAssistants.mockResolvedValue({ data: [assistant] });
+
+    renderWithProviders(<AssistantTestComponent />);
+
+    await waitFor(() => expect(screen.getByTestId('assistant-count')).toHaveTextContent('1'));
+
+    await userEvent.click(screen.getByText('Pick Assistant'));
+    await waitFor(() => {
+      expect(screen.getByTestId('selected-assistant')).toHaveTextContent('asst-1');
+      expect(screen.getByTestId('assistant-policy')).toHaveTextContent('deep');
+      expect(screen.getByTestId('assistant-space')).toHaveTextContent('space-9');
+    });
+
+    await userEvent.click(screen.getByText('Clear Assistant'));
+    await waitFor(() => expect(screen.getByTestId('selected-assistant')).toHaveTextContent('none'));
   });
 
   test('clears state when no user is present', async () => {
