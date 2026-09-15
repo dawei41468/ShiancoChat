@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Optional
 from backend.services.auth.tokens import (
     create_access_token,
     create_refresh_token,
@@ -15,7 +16,7 @@ from pydantic import BaseModel
 from backend.rate_limiter import limiter
 
 class RefreshToken(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 router = APIRouter()
 

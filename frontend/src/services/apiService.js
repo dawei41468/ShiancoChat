@@ -5,6 +5,12 @@ import { jwtDecode } from 'jwt-decode';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4100';
 const REFRESH_THRESHOLD_MINUTES = 2; // Refresh 2 minutes before expiration
 
+// JS-readable session hint. The refresh cookie is HttpOnly (invisible to JS),
+// so this flag records that this browser recently held a session. It lets the
+// 401 interceptor distinguish a returning user (worth a refresh attempt) from
+// an anonymous visitor (skip the pointless refresh call).
+const SESSION_HINT_KEY = 'shianco_has_session';
+
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
   withCredentials: true,
@@ -134,10 +140,19 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     }
 
-    // If 401 and not a refresh request
+    // If 401 and not a refresh request, attempt refresh only when this
+    // client plausibly holds a session: an in-memory Authorization header
+    // (set by login/refresh) OR the session hint flag. The hint covers page
+    // reloads where the access cookie expired but the 7-day HttpOnly refresh
+    // cookie is still valid — without it those users would be bounced to
+    // login instead of being silently re-authenticated. Anonymous visitors
+    // (no header, no hint) skip the refresh round-trip entirely.
+    const hasAuthHeader = Boolean(apiClient.defaults.headers.common['Authorization']);
+    const hasSessionHint = localStorage.getItem(SESSION_HINT_KEY) === '1';
     if (error.response?.status === 401 &&
         !originalRequest._retry &&
-        !originalRequest.url.includes('/auth/refresh')) {
+        !originalRequest.url.includes('/auth/refresh') &&
+        (hasAuthHeader || hasSessionHint)) {
       originalRequest._retry = true;
 
       try {
@@ -156,9 +171,11 @@ apiClient.interceptors.response.use(
 export const setAuthHeader = (token) => {
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    localStorage.setItem(SESSION_HINT_KEY, '1');
     scheduleTokenRefresh(token);
   } else {
     delete apiClient.defaults.headers.common['Authorization'];
+    localStorage.removeItem(SESSION_HINT_KEY);
     clearRefreshTimer();
   }
 };
