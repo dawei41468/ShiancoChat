@@ -80,6 +80,8 @@ class UserService:
             await db.document_chunks.delete_many({"document_id": {"$in": document_ids}})
             await db.documents.delete_many({"_id": {"$in": document_ids}})
 
+        await db.artifacts.delete_many({"user_email": email})
+
         await db.refresh_tokens.update_many(
             {"email": email},
             {"$set": {"is_active": False}}

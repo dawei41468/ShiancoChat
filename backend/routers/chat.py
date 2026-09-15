@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 from backend.database import get_db
@@ -6,6 +7,8 @@ from datetime import datetime, timezone
 from backend import auth # Import auth module for get_current_user
 from backend.rate_limiter import limiter
 from backend.routers import openai as openai_router
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

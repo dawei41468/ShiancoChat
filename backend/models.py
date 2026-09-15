@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from backend.localization.departments import Department, get_department_name
 
@@ -16,7 +16,7 @@ class User(BaseModel):
    hashed_password: str
    department: Department
    role: UserRole = UserRole.USER
-   created_at: datetime = Field(default_factory=datetime.utcnow)
+   created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
    language: str = "zh"
 
    @property
@@ -60,14 +60,14 @@ class RefreshToken(BaseModel):
    email: str
    expires_at: datetime
    is_active: bool = True
-   created_at: datetime = Field(default_factory=datetime.utcnow)
+   created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     conversation_id: str
     sender: str
     text: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     thinking_duration: Optional[float] = None
     citations: Optional[List[dict]] = None
     web_search_state: Optional[str] = None
@@ -77,8 +77,8 @@ class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_email: str # Link to the user who owns this conversation
     title: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UpdateConversationTitleRequest(BaseModel):
     new_title: str
@@ -105,8 +105,8 @@ class Artifact(BaseModel):
     type: str
     title: str
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ArtifactCreate(BaseModel):
     conversation_id: str
@@ -126,7 +126,7 @@ class ToolConfig(BaseModel):
     enabled: bool = True
     allowed_roles: List[UserRole] = Field(default_factory=lambda: [UserRole.USER, UserRole.ADMIN])
     default_enabled: bool = False
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ToolConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
@@ -141,7 +141,7 @@ class ToolAuditEvent(BaseModel):
     status: str
     latency_ms: Optional[int] = None
     details: Optional[dict] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Payload for INITIATING a stream from the frontend
 class StreamRequestPayload(BaseModel):
@@ -161,7 +161,7 @@ class DocumentChunk(BaseModel):
     chunk_index: int
     content: str
     embedding: Optional[List[float]] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Document(BaseModel):
     """Model for storing uploaded documents and their extracted text"""
@@ -173,7 +173,7 @@ class Document(BaseModel):
     content_type: str
     expires_at: datetime
     conversation_id: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     chunk_count: int = 0
 
 class KnowledgeSpace(BaseModel):
@@ -182,8 +182,8 @@ class KnowledgeSpace(BaseModel):
     description: Optional[str] = None
     owner_email: str
     scope: str = "user"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     document_count: int = 0
 
 class KnowledgeSpaceCreate(BaseModel):

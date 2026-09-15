@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List
 from motor.motor_asyncio import AsyncIOMotorDatabase # Import the correct type hint
 
-from backend.database import get_db, delete_user
+from backend.database import get_db
 from backend.models import User, UserRole, UserRoleUpdate, UserPublic # Import UserRoleUpdate
 from backend.auth import get_current_user
 from backend.rate_limiter import limiter
+from backend.services.auth.users import UserService
 from pymongo import ReturnDocument
 
 router = APIRouter(
@@ -89,5 +90,5 @@ async def delete_user_endpoint(
     if not user_to_delete:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
-    await delete_user(user_email=user_to_delete["email"])
+    await UserService.delete_user(user_to_delete["email"])
     return {"message": "User and associated data deleted successfully"}

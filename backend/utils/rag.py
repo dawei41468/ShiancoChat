@@ -321,6 +321,9 @@ async def _in_memory_search(
         created_at = chunk.get("created_at")
         try:
             if created_at:
+                # pymongo returns naive UTC datetimes; normalize before comparing
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
                 age_days = max((now - created_at).total_seconds() / 86400.0, 0.0)
                 recency_factor = max(0.0, 1.0 - min(age_days / RECENT_DAYS, 1.0))
                 boost = 1.0 + MAX_BOOST * recency_factor

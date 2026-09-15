@@ -55,34 +55,6 @@ async def get_db():
         await init_client_with_retry()
     return db
 
-async def delete_user(user_email: str):
-    # Find all conversations belonging to the user
-    user_conversations = db.conversations.find({"user_email": user_email})
-    conversation_ids = [conv["id"] async for conv in user_conversations]
-
-    # Delete all messages associated with these conversations
-    if conversation_ids:
-        await db.messages.delete_many({"conversation_id": {"$in": conversation_ids}})
-
-    # Delete all conversations belonging to the user
-    await db.conversations.delete_many({"user_email": user_email})
-
-    user_docs = await db.documents.find({"user_email": user_email}).to_list(length=None)
-    document_ids = [doc["_id"] for doc in user_docs]
-    if document_ids:
-        await db.document_chunks.delete_many({"document_id": {"$in": document_ids}})
-        await db.documents.delete_many({"_id": {"$in": document_ids}})
-
-    await db.artifacts.delete_many({"user_email": user_email})
-
-    await db.refresh_tokens.update_many(
-        {"email": user_email},
-        {"$set": {"is_active": False}}
-    )
-
-    # Delete the user document
-    await db.users.delete_one({"email": user_email})
-
 def close_mongo_connection():
     client.close()
 
