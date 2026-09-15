@@ -95,3 +95,6 @@ backend/models/
 *.bin
 *.pt
 *.pth
+
+# AI assistant tooling (local, per-developer)
+.mimocode/
